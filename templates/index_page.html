@@ -29,17 +29,52 @@
 {% endblock %}
 
 {% block main %}
+
+
 <section class="section">
-    <h2 class="title is-1 is-spaced">Welcome to MDverse 🔎</h2>
-    <div class="content" style="overflow-wrap: break-word;">
+    <section class="hero is-medium py-6" style="background-image: url('../static/index_bg.svg'); background-size: cover; background-position: center; background-repeat: no-repeat; color: rgb(0, 0, 0);">
+        <div class="hero-body has-text-centered">
+            <h2 class="title is-1 is-spaced">Welcome to MDverse!</h2>
+            <p class="subtitle has-text-weight-bold">A simple way to explore and reuse molecular dynamics data</p>
+        </div>
+    </section>
+
+    <div class="content pt-4" style="overflow-wrap: break-word;">
         <p>
             MDverse is a platform designed to facilitate the exploration and reuse of datasets related to molecular dynamics (MD) simulations.
         </p>
     </div>
-    <div class="fixed-grid has-5-cols">
+    <nav class="level py-6 mb-2 has-background-white-ter">
+        <div class="level-item has-text-centered">
+            <div>
+            <p class="heading">Datasets</p>
+            <p class="title">{{ total_count.number_of_datasets }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+            <p class="heading">Files</p>
+            <p class="title">{{ total_count.total_files }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+            <p class="heading">Analysed files</p>
+            <p class="title">{{ analysed_files_count }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+            <p class="heading">Publications</p>
+            <p class="title">1</p>
+            </div>
+        </div>
+    </nav>
+
+    <div class="fixed-grid has-5-cols "">
         <div class="grid">
             <div class="cell is-col-span-3">
-                <table id="SummaryTable" class="table is-striped is-narrow is-hoverable is-size-8">
+                <table id="SummaryTable" class="table is-striped is-hoverable is-size-8">
                     <thead>
                         <tr>
                             <th>Dataset origin</th>
@@ -112,6 +147,17 @@
 
         </div>
     </div>
+    <section class="section is-spaced has-background-white-ter">
+        <h3 class="title is-3 has-text-centered">Developments</h3>
+        <div class="grid has-2-cols has-text-centered py-4 is-primary">
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+        </div>
+
+    </section>
+    
 </section>
 {% endblock %}
 
@@ -144,10 +190,10 @@
             "info": false,
             autoWidth: false,
             responsive: true,
-            columnDefs: [{ orderable: false, targets: [0,1,2,3,4,5,6,7,8] }],
+            columnDefs: [{ orderable: false, targets: [0,1,2,3,4,5,6,7,8], className: 'dt-center', targets: '_all', }],
             // Disable the highlight/bold style on the sorted column
             orderClasses: false,
-
+            ordering: false,
             });
         });
     </script>

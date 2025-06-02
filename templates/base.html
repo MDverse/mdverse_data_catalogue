@@ -1,6 +1,6 @@
 <!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="theme-light">
 
 <head>
   <meta charset="utf-8">
@@ -8,7 +8,7 @@
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
   <title>{% block title %}MDverse data explorer{% endblock %}</title>
 
-  <!-- Bootstrap CSS -->
+  <!-- Bulma CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
   <!-- JQuery -->
   <!-- Load before DataTables --> 
@@ -29,7 +29,7 @@
 
 <body>
   <header>
-    <nav class="navbar has-background-primary-95" role="navigation" aria-label="main navigation">
+    <nav class="navbar is-black" role="navigation" aria-label="main navigation">
       <div class="navbar-brand is-size-3 has-text-weight-bold">
         <a class="navbar-item" href="/">
           MDverse
@@ -60,6 +60,17 @@
             MDP files
           </a>
         </div>
+        <div class="navbar-end">
+          <div class="navbar-item has-dropdown is-hoverable">
+            <a class="navbar-link">
+              Theme
+            </a>
+            <div class="navbar-dropdown is-right">
+              <a class="navbar-item" id="light-theme">Light</a>
+              <a class="navbar-item" id="dark-theme">Dark</a>
+            </div>
+          </div>
+        </div>
       </div>
     </nav>
   </header>
@@ -73,7 +84,30 @@
       </p>
     </div>
   </footer>
-  {% block script_extra %}{% endblock %}
+
+{% block script_extra %}
+<!-- Theme selector javascript-->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const root = document.documentElement;
+
+  function switchTheme(t) {
+    root.setAttribute('data-theme', t);// Bulma
+    root.classList.toggle('dark', t === 'dark');// DataTables
+    localStorage.setItem('theme', t);
+  }
+
+  /* ------------ initial load ----------------- */
+  const saved = localStorage.getItem('theme');
+  const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  switchTheme(saved ?? system);
+
+  /* ------------ dropdown hooks --------------- */
+  document.getElementById('light-theme').onclick = () => switchTheme('light');
+  document.getElementById('dark-theme').onclick  = () => switchTheme('dark');
+});
+</script>
+{% endblock %}
 </body>
 
 </html>
