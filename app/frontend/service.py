@@ -97,33 +97,50 @@ def get_dataset_origin_summary() -> tuple[list[any], dict[str, str]]:
         datasets_stats_results = session.exec(statement).all()
 
         datasets_stats_total_count = {
-            "Number of datasets": "{:,}".format(sum(
+            "number_of_datasets": "{:,}".format(sum(
             row.number_of_datasets for row in datasets_stats_results
             )),
-            "First dataset": min(
+            "first_dataset": min(
             row.first_dataset for row in datasets_stats_results
             ) if any(row.first_dataset for row in datasets_stats_results) else None,
-            "Last dataset": max(
+            "last_dataset": max(
             row.last_dataset for row in datasets_stats_results
             ) if any(row.last_dataset for row in datasets_stats_results) else None,
-            "Non-zip files": "{:,}".format(sum(
+            "non_zip_files": "{:,}".format(sum(
             row.non_zip_files for row in datasets_stats_results
             )),
-            "Zip files": "{:,}".format(sum(
+            "zip_files": "{:,}".format(sum(
             row.zip_files for row in datasets_stats_results
             )),
-            "Files in zip files": "{:,}".format(sum(
+            "files_in_zip_files": "{:,}".format(sum(
             row.files_within_zip_files for row in datasets_stats_results
             )),
-            "Total files": "{:,}".format(sum(
+            "total_files": "{:,}".format(sum(
             row.total_files for row in datasets_stats_results
             )),
-            "Total size in GB for non-zip and zip files ": "{:,.0f}".format(sum(
+            "total_size_in_GB_for_non_zip_and_zip_files ": "{:,.0f}".format(sum(
             row.total_size_in_GB_non_zip_and_zip_files for row in datasets_stats_results
             )),
         }
 
-        return datasets_stats_results, datasets_stats_total_count
+        # Sum the amount of rows in TopologyFile, ParameterFile, TrajectoryFile
+        statment2 = (
+            select(
+                func.count(TopologyFile.file_id).label("topology_files"),
+                func.count(ParameterFile.file_id).label("parameter_files"),
+                func.count(TrajectoryFile.file_id).label("trajectory_files"),
+            )
+            .join(TopologyFile, TopologyFile.file_id == File.file_id, isouter=True)
+            .join(ParameterFile, ParameterFile.file_id == File.file_id, isouter=True)
+            .join(TrajectoryFile, TrajectoryFile.file_id == File.file_id, isouter=True)
+            .select_from(File)
+        )
+
+        results2 = session.exec(statment2).first()
+        sum_of_analysed_files = results2.topology_files + results2.parameter_files + results2.trajectory_files
+        sum_of_analysed_files = "{:,}".format(sum_of_analysed_files)
+
+        return datasets_stats_results, datasets_stats_total_count, sum_of_analysed_files
 
 
 def get_titles():
