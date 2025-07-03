@@ -15,17 +15,12 @@ from typing import Optional
 
 from ..db_schema import (
     Dataset,
-    DatasetKeywordLink,
-    DatasetOrigin,
+    DataSource,
     File,
     FileType,
-    Keyword,
     ParameterFile,
     TopologyFile,
     TrajectoryFile,
-    Barostat,
-    Integrator,
-    Thermostat,
     engine,
 )
 
@@ -52,7 +47,7 @@ def get_dataset_origin_summary() -> tuple[list[any], dict[str, str]]:
         statement = (
             select(
                 # Dataset stats
-                DatasetOrigin.name.label("dataset_origin"),
+                DataSource.name.label("dataset_origin"),
                 func.count(func.distinct(Dataset.dataset_id)).label("number_of_datasets"),
                 func.min(Dataset.date_created).label("first_dataset"),
                 func.max(Dataset.date_created).label("last_dataset"),
@@ -85,13 +80,13 @@ def get_dataset_origin_summary() -> tuple[list[any], dict[str, str]]:
                 # Total files (outside-non-zip_parent + parent zips + inside zips)
                 func.count(func.distinct(File.file_id)).label("total_files"),
             )
-            .join(Dataset, Dataset.origin_id == DatasetOrigin.origin_id)
+            .join(Dataset, Dataset.data_source_id == DataSource.data_source_id)
             # We have to do an outerjoin here because
             # there are some datasets with no files
             # For example some osf datasets have no files
             .outerjoin(File, File.dataset_id == Dataset.dataset_id)
             .outerjoin(FileType, File.file_type_id == FileType.file_type_id)
-            .group_by(DatasetOrigin.name)
+            .group_by(DataSource.name)
         )
 
         datasets_stats_results = session.exec(statement).all()
@@ -211,8 +206,8 @@ def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
             func.count(Dataset.dataset_id).label('count')
         )
         .join(File, File.dataset_id == Dataset.dataset_id)
-        .join(DatasetOrigin, Dataset.origin_id == DatasetOrigin.origin_id)
-        .where(DatasetOrigin.name == origin_name)
+        .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
+        .where(DataSource.name == origin_name)
         .group_by('year')
         .order_by('year')
     )
@@ -289,8 +284,8 @@ def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
             extract('year', Dataset.date_created).label('year'),
             func.count(Dataset.dataset_id).label('count')
         )
-        .join(DatasetOrigin, Dataset.origin_id == DatasetOrigin.origin_id)
-        .where(DatasetOrigin.name == origin_name)
+        .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
+        .where(DataSource.name == origin_name)
         .group_by('year')
         .order_by('year')
     )

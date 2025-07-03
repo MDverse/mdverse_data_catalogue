@@ -5,17 +5,12 @@ from sqlmodel import Session, select, or_, col
 
 from ...db_schema import (
     Dataset,
-    DatasetKeywordLink,
-    DatasetOrigin,
+    DataSource,
     File,
     FileType,
-    Keyword,
     ParameterFile,
     TopologyFile,
     TrajectoryFile,
-    Barostat,
-    Integrator,
-    Thermostat,
     engine,
 )
 
@@ -27,9 +22,8 @@ def get_all_datasets() -> list[Dataset]:
         statement = (
             select(Dataset)
             .options(
-                selectinload(Dataset.origin),
+                selectinload(Dataset.data_source),
                 selectinload(Dataset.author),
-                selectinload(Dataset.keyword),
             )
         )
         results = session.exec(statement).all()
@@ -47,8 +41,8 @@ def get_all_datasets_for_datatables(
     """
     statement = (
         select(
-            DatasetOrigin.name.label("dataset_origin"),
-            Dataset.id_in_origin.label("dataset_id_in_origin"),
+            DataSource.name.label("dataset_origin"),
+            Dataset.id_in_data_source.label("dataset_id_in_origin"),
             Dataset.dataset_id,
             Dataset.title,
             Dataset.description,
@@ -57,9 +51,9 @@ def get_all_datasets_for_datatables(
             Dataset.file_number,
             Dataset.download_number,
             Dataset.view_number,
-            Dataset.url,
+            Dataset.url_in_data_source,
         )
-        .join(DatasetOrigin, Dataset.origin_id == DatasetOrigin.origin_id)
+        .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
     )
 
     if sort_column_name is not None:
@@ -76,8 +70,8 @@ def get_all_datasets_for_datatables(
 
     if search is not None:
         statement = statement.where(or_(
-            DatasetOrigin.name.ilike(f"%{search}%"),
-            Dataset.id_in_origin.ilike(f"%{search}%"),
+            DataSource.name.ilike(f"%{search}%"),
+            Dataset.id_in_data_source.ilike(f"%{search}%"),
             Dataset.title.ilike(f"%{search}%"),
             Dataset.description.ilike(f"%{search}%"),
         ))
@@ -96,10 +90,9 @@ def get_dataset_info_by_id(dataset_id: int):
             select(Dataset)
             .options(
                 # Load the related origin object so that dataset.origin is available.
-                selectinload(Dataset.origin),
+                selectinload(Dataset.data_source),
                 # Load the many-to-many relationship for authors and keywords
                 selectinload(Dataset.author),
-                selectinload(Dataset.keyword)
             )
             .where(Dataset.dataset_id == dataset_id)
         )
