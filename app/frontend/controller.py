@@ -23,7 +23,7 @@ async def read_index(request: Request):
     service.generate_title_wordcloud()
 
     # Get the data from query
-    datasets_stats_results, datasets_stats_total_count, sum_of_analysed_files = service.get_dataset_origin_summary()
+    datasets_stats_results, datasets_stats_total_count, home_page_banner_stats = service.get_dataset_origin_summary()
 
     # Create both Bokeh plots.
     files_plot = service.create_files_plot()
@@ -40,7 +40,7 @@ async def read_index(request: Request):
             "request": request,
             "results": datasets_stats_results,
             "total_count": datasets_stats_total_count,
-            "analysed_files_count": sum_of_analysed_files,
+            "banner_stats": home_page_banner_stats,
             "files_plot_script": files_plot_script,
             "files_plot_div": files_plot_div,
             "datasets_plot_script": datasets_plot_script,

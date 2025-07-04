@@ -118,24 +118,31 @@ def get_dataset_origin_summary() -> tuple[list[any], dict[str, str]]:
             )),
         }
 
-        # Sum the amount of rows in TopologyFile, ParameterFile, TrajectoryFile
-        statment2 = (
-            select(
-                func.count(TopologyFile.file_id).label("topology_files"),
-                func.count(ParameterFile.file_id).label("parameter_files"),
-                func.count(TrajectoryFile.file_id).label("trajectory_files"),
-            )
-            .join(TopologyFile, TopologyFile.file_id == File.file_id, isouter=True)
-            .join(ParameterFile, ParameterFile.file_id == File.file_id, isouter=True)
-            .join(TrajectoryFile, TrajectoryFile.file_id == File.file_id, isouter=True)
-            .select_from(File)
+
+        statement_topologies = (
+            select(func.count(File.file_id))
+            .join(FileType, File.file_type_id == FileType.file_type_id)
+            .where(FileType.name.in_(["pdb", "crd", "gro", "coor"]))
         )
+        results_toplogies = session.exec(statement_topologies).first()
 
-        results2 = session.exec(statment2).first()
-        sum_of_analysed_files = results2.topology_files + results2.parameter_files + results2.trajectory_files
-        sum_of_analysed_files = "{:,}".format(sum_of_analysed_files)
+        statement_trajectories = (
+            select(func.count(File.file_id))
+            .join(FileType, File.file_type_id == FileType.file_type_id)
+            .where(FileType.name.in_(["trr", "xtc", "dcd", "inpcrd", "dtr", "mdcrd", "nc", "ncdf", "trj"]))
+        )
+        results_trajectories = session.exec(statement_trajectories).first()
+        
+        statement_sources = select(func.count()).select_from(DataSource)
+        result_sources = session.exec(statement_sources).first()
 
-        return datasets_stats_results, datasets_stats_total_count, sum_of_analysed_files
+        home_page_banner_stats = {
+            "total_topology_files": "{:,}".format(results_toplogies) if results_toplogies else "0",
+            "total_trajectory_files": "{:,}".format(results_trajectories) if results_trajectories else "0",
+            "total_data_sources": "{:,}".format(result_sources) if result_sources else "0",
+        }
+
+        return datasets_stats_results, datasets_stats_total_count, home_page_banner_stats
 
 
 def get_titles():
