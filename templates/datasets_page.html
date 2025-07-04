@@ -57,7 +57,7 @@
                 data: 'dataset_origin'
             },
             { // id in origin
-                data: 'dataset_id_in_origin',
+                data: 'id_in_data_source',
                 render: function(data, type, row) {
                     // data: dataset_id_in_origin
                     // row: the entire row data, including dataset_url
@@ -101,6 +101,7 @@
             { width:  '1%', targets:  7 },  // number of downloads
             { width:  '1%', targets:  8 },  // number of views
             { width: '32%', targets:  9 },  // description
+            { className: 'dt-center', targets: "_all" },  // center align all columns
         ],
         // https://datatables.net/reference/option/drawCallback
         "drawCallback": function(settings) {

@@ -42,7 +42,7 @@ def get_all_datasets_for_datatables(
     statement = (
         select(
             DataSource.name.label("dataset_origin"),
-            Dataset.id_in_data_source.label("dataset_id_in_origin"),
+            Dataset.id_in_data_source,
             Dataset.dataset_id,
             Dataset.title,
             Dataset.description,
@@ -51,7 +51,7 @@ def get_all_datasets_for_datatables(
             Dataset.file_number,
             Dataset.download_number,
             Dataset.view_number,
-            Dataset.url_in_data_source,
+            Dataset.url_in_data_source.label("url"),
         )
         .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
     )
@@ -91,7 +91,7 @@ def get_dataset_info_by_id(dataset_id: int):
             .options(
                 # Load the related origin object so that dataset.origin is available.
                 selectinload(Dataset.data_source),
-                # Load the many-to-many relationship for authors and keywords
+                # Load the many-to-many relationship for authors
                 selectinload(Dataset.author),
             )
             .where(Dataset.dataset_id == dataset_id)

@@ -9,9 +9,9 @@
         </p>
         <p class="subtitle">
             {% if dataset.author %}
-            {% for author in dataset.author %}
-            {{ author.name }}{% if not loop.last %}; {% endif %}
-            {% endfor %}
+                {% for author in dataset.author %}
+                    {{ author.name }}{% if not loop.last %}; {% endif %}
+                {% endfor %}
             {% else %}
             N/A
             {% endif %}
@@ -23,7 +23,7 @@
             <div class="column">
                 <p class="title is-5">General information</p>
                 <ul>
-                    <li>Dataset: <a href="{{ dataset.url }}" target="_blank">{{ dataset.id_in_origin }}</a> from {{ dataset.origin.name if dataset.origin else 'N/A' }}</li>
+                    <li>Dataset: <a href="{{ dataset.url_in_data_source }}" target="_blank">{{ dataset.id_in_data_source }}</a> from {{ dataset.data_source.name if dataset.data_source.name else 'N/A' }}</li>
                     <li>License: {{ dataset.license }}</li>
                     <li>DOI: <a href="https://doi.org/{{ dataset.doi }}" target="_blank">{{ dataset.doi }}</a></li>
                 </ul>
@@ -31,7 +31,7 @@
             <div class="column">
                 <p class="title is-5">Additional information</p>
                 <ul>
-                    <li>Number of files: {{ dataset.file_number }}
+                    <li>Number of files: {{ dataset.file_number }}&nbsp;&nbsp;&nbsp;&nbsp;→&nbsp;&nbsp;
                         {# Diplay button to access files for a given dataset #}
                         {# only from all datasets page #}
                         {% if request.headers["hx-target"] == "dataset_details" %}
@@ -61,12 +61,13 @@
 
         <div class="content">
             <p class="title is-5">Keywords</p>
-            <p>{% if dataset.keyword %}
-                {% for keyword in dataset.keyword %}
-                <span class="tag">{{ keyword.entry }} </span>
-                {% endfor %}
+            <p>
+                {% if dataset.keywords %}
+                    {% for keyword in dataset.keywords.split(';') %}
+                        <span class="tag">{{ keyword.strip() }}</span>
+                    {% endfor %}
                 {% else %}
-                N/A
+                    N/A
                 {% endif %}
             </p>
         </div>
