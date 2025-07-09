@@ -3,11 +3,11 @@
     <table id="files_table" class="table is-striped is-hoverable" style="width:100%; table-layout: fixed;">
         <thead>
             <tr>
-                <th>dataset origin</th>
-                <th>dataset id</th>
-                <th>file name</th>
-                <th>atom number</th>
-                <th>frame number</th>
+                <th class="is-vcentered">source</th>
+                <th class="is-vcentered">source id</th>
+                <th class="is-vcentered">file name</th>
+                <th class="is-vcentered">atom number</th>
+                <th class="is-vcentered">frame number</th>
             </tr>
         </thead>
     </table>
@@ -56,6 +56,7 @@
                 { width: '40%', targets: 2 },    // file name
                 { width: '20%', targets: 3 },    // atom number
                 { width: '20%', targets: 4 },    // frame number
+                { className: 'dt-center', targets: "_all" }
             ],
             // Disable automatic calculation so the custom widths are used
             autoWidth: false,

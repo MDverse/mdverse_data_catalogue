@@ -16,19 +16,20 @@
 <section class="section">
     <h1>Datasets</h1>
 
-    <table id="datasets_table" class="table is-striped is-hoverable" style="width:100%;">
+    <table id="datasets_table" class="table is-striped is-hoverable is-size-8" style="width:100%;">
         <thead>
             <tr>
-                <th>view</th>
-                <th>dataset origin</th>
-                <th>dataset id</th>
-                <th>title</th>
-                <th>date created</th>
-                <th>date last modified</th>
-                <th># of files</th>
-                <th># of downloads</th>
-                <th># of views</th>
-                <th>description</th>
+                <th class="is-vcentered">see more</th>
+                <th class="is-vcentered">source</th>
+                <th class="is-vcentered">source id</th>
+                <th class="is-vcentered">title</th>
+                <th class="is-vcentered">created</th>
+                <th class="is-vcentered">last modified</th>
+                <th class="is-vcentered">files</th>
+                <th class="is-vcentered">downloads</th>
+                <th class="is-vcentered">views</th>
+                <th class="is-vcentered">description</th>
+                <th class="is-vcentered">author(s)</th>
             </tr>
         </thead>
     </table>
@@ -66,7 +67,7 @@
             },
             { // title
                 data: 'title',
-                render: $.fn.dataTable.render.ellipsis(30),
+                render: $.fn.dataTable.render.ellipsis(28),
             },
             { // date created
                  data: 'date_created'
@@ -85,22 +86,28 @@
             },
             { // description
                 data: 'description',
-                render: $.fn.dataTable.render.ellipsis(35),
+                render: $.fn.dataTable.render.ellipsis(20),
+            },
+            { // author(s)
+                data: 'author',
+                render: $.fn.dataTable.render.ellipsis(12),
             },
         ],
         orderClasses: false,
         autoWidth: false,
+        scrollX: true,
         columnDefs: [
-            { width:  '5%', targets:  0, orderable: false },  // view button
+            { width:  '5%', targets:  0, orderable: false },  // details button
             { width:  '6%', targets:  1 },  // dataset origin
             { width:  '6%', targets:  2 },  // dataset id in origin
-            { width: '38%', targets:  3 },  // title
+            { width: '28%', targets:  3 },  // title
             { width: '10%', targets:  4 },  // date created
             { width: '10%', targets:  5 },  // date last modified
             { width:  '1%', targets:  6 },  // number of files
             { width:  '1%', targets:  7 },  // number of downloads
             { width:  '1%', targets:  8 },  // number of views
-            { width: '32%', targets:  9 },  // description
+            { width: '20%', targets:  9 },  // description
+            { width: '12%', targets:  10 },  // authors
             { className: 'dt-center', targets: "_all" },  // center align all columns
         ],
         // https://datatables.net/reference/option/drawCallback

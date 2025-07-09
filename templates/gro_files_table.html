@@ -3,15 +3,15 @@
     <table id="gro_files_table" class="table is-striped is-hoverable" style="width:100%; table-layout: fixed;">
         <thead>
           <tr>
-            <th>dataset origin</th>
-            <th>dataset id</th>
-            <th>file name</th>
-            <th>atom number</th>
-            <th>has protein</th>
-            <th>has nucleic</th>
-            <th>has lipid</th>
-            <th>has glucid</th>
-            <th>has water ion</th>
+            <th class="is-vcentered">source</th>
+            <th class="is-vcentered">source id</th>
+            <th class="is-vcentered">file name</th>
+            <th class="is-vcentered">atom number</th>
+            <th class="is-vcentered">has protein</th>
+            <th class="is-vcentered">has nucleic</th>
+            <th class="is-vcentered">has lipid</th>
+            <th class="is-vcentered">has glucid</th>
+            <th class="is-vcentered">has water/ion</th>
           </tr>
         </thead>
     </table>
@@ -58,12 +58,13 @@
             { width: '11%', targets: 0, "orderable": "false" },    // dataset origin
             { width: '11%', targets: 1 },    // dataset id
             { width: '20%', targets: 2 },    // file name
-            { width: '13%', targets: 3 },    // atom_number
+            { width: '11%', targets: 3 },    // atom_number
             { width: '9%', targets: 4 },     // has_protein
             { width: '9%', targets: 5 },     // has_nucleic
             { width: '9%', targets: 6 },     // has_lipid
             { width: '9%', targets: 7 },     // has_glucid
-            { width: '9%', targets: 8 }      // has_water_ion
+            { width: '11%', targets: 8 },      // has_water_ion
+            { className: 'dt-center', targets: "_all" }
         ],
         autoWidth: false, // Disable automatic calculation so the custom widths are used
     });

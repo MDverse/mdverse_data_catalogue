@@ -3,15 +3,15 @@
     <table id="files_table" class="table is-striped is-hoverable" style="width:100%; table-layout: fixed;">
         <thead>
           <tr>
-            <th>dataset origin</th>
-            <th>dataset id</th>
-            <th>file name</th>
-            <th>dt</th>
-            <th>nsteps</th>
-            <th>temp. (K)</th>
-            <th>integrator</th>
-            <th>barostat</th>
-            <th>thermostat</th>
+            <th class="is-vcentered">source</th>
+            <th class="is-vcentered">source id</th>
+            <th class="is-vcentered">file name</th>
+            <th class="is-vcentered">dt</th>
+            <th class="is-vcentered">nsteps</th>
+            <th class="is-vcentered">temp. (K)</th>
+            <th class="is-vcentered">integrator</th>
+            <th class="is-vcentered">barostat</th>
+            <th class="is-vcentered">thermostat</th>
           </tr>
         </thead>
       </table>
@@ -39,7 +39,7 @@
             },
             { 
                 data: 'file_name',
-                render: $.fn.dataTable.render.ellipsis(30),
+                render: $.fn.dataTable.render.ellipsis(25),
             },
             { 
                 data: 'dt',
@@ -55,21 +55,22 @@
                 data: 'temperature',
                 className: 'has-text-left',
             },
-            { data: 'thermostat_name' },
-            { data: 'barostat_name' },
-            { data: 'integrator_name' }
+            { data: 'thermostat' },
+            { data: 'barostat' },
+            { data: 'integrator' }
         ],
             orderClasses: false,
             columnDefs: [
                 { width: '10%', targets: 0 },    // dataset origin
                 { width: '10%', targets: 1 },    // dataset id
-                { width: '30%', targets: 2 },    // file name
+                { width: '25%', targets: 2 },    // file name
                 { width: '5%', targets: 3 },    // dt
                 { width: '10%', targets: 4 },    // nsteps
-                { width: '5%', targets: 5 },    // temperature
+                { width: '8%', targets: 5 },    // temperature
                 { width: '10%', targets: 6 },    // thermostat
-                { width: '10%', targets: 7 },    // barostat
+                { width: '12%', targets: 7 },    // barostat
                 { width: '10%', targets: 8 },    // integrator
+                { className: 'dt-center', targets: "_all" }
             ],
             // Disable automatic calculation so the custom widths are used
             autoWidth: false,

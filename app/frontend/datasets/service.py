@@ -4,6 +4,8 @@ from sqlmodel import Session, select, or_, col
 
 
 from ...db_schema import (
+    DatasetAuthorLink,
+    Author,
     Dataset,
     DataSource,
     File,
@@ -52,8 +54,24 @@ def get_all_datasets_for_datatables(
             Dataset.download_number,
             Dataset.view_number,
             Dataset.url_in_data_source.label("url"),
+            func.group_concat(Author.name, '; ').label("author"),
         )
         .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
+        .join(DatasetAuthorLink, Dataset.dataset_id == DatasetAuthorLink.dataset_id)
+        .join(Author, DatasetAuthorLink.author_id == Author.author_id)
+        .group_by(
+            Dataset.dataset_id,
+            DataSource.name,
+            Dataset.id_in_data_source,
+            Dataset.title,
+            Dataset.description,
+            Dataset.date_created,
+            Dataset.date_last_modified,
+            Dataset.file_number,
+            Dataset.download_number,
+            Dataset.view_number,
+            Dataset.url_in_data_source
+        )
     )
 
     if sort_column_name is not None:
@@ -74,6 +92,7 @@ def get_all_datasets_for_datatables(
             Dataset.id_in_data_source.ilike(f"%{search}%"),
             Dataset.title.ilike(f"%{search}%"),
             Dataset.description.ilike(f"%{search}%"),
+            Author.name.ilike(f"%{search}%"),
         ))
     with Session(engine) as session:
         results = session.exec(statement).all()

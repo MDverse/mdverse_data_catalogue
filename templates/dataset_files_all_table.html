@@ -11,7 +11,7 @@
 <tbody>
     {% for file in all_files %}
     <tr>
-        <td>{{ file.name }}</td>
+        <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">{{ file.name }}</td>
         <td>{{ file.file_type.name }}</td>
         <td class="has-text-left">{{ "{:,.0f}".format(file.size_in_bytes) }}</td>
         <td><a href="{{ file.url }}" target="_blank">🌐</a></td>

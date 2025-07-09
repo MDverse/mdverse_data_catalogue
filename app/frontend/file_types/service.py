@@ -68,17 +68,17 @@ def get_list_of_files_for_a_file_type(file_type: str) -> pd.DataFrame:
     with Session(engine) as session:
         statement = (
             select(
-                Dataset.id_in_origin.label("dataset_id"),
+                Dataset.id_in_data_source.label("dataset_id"),
                 DataSource.name.label("dataset_origin"),
                 File.name.label("file_name"),
                 File.size_in_bytes.label("file_size_in_bytes"),
                 File.is_from_zip_file.label("is_file_from_zip_file"),
                 file_url_expr,
-                Dataset.url.label("dataset_url"),
+                Dataset.url_in_data_source.label("dataset_url"),
             )
             .join(FileType, File.file_type_id == FileType.file_type_id)
             .join(Dataset, File.dataset_id == Dataset.dataset_id)
-            .join(DataSource, Dataset.origin_id == DataSource.origin_id)
+            .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
             # Left join the parent file so that files from a zip can retrieve the parent URL.
             .join(ParentFile, File.parent_zip_file_id == ParentFile.file_id, isouter=True)
             .where(FileType.name == file_type)
@@ -112,8 +112,8 @@ def get_gro_files_for_datatables(
             TopologyFile.has_glucid.label("has_glucid"),
             TopologyFile.has_water_ion.label("has_water_ion"),
             File.name.label("file_name"),
-            Dataset.id_in_origin.label("dataset_id_in_origin"),
-            Dataset.url.label("dataset_url"),
+            Dataset.id_in_data_source.label("dataset_id_in_origin"),
+            Dataset.url_in_data_source.label("dataset_url"),
             DataSource.name.label("dataset_origin"),
         )
         .join(File, TopologyFile.file_id == File.file_id)
@@ -139,7 +139,7 @@ def get_gro_files_for_datatables(
     if search is not None:
         statement = statement.where(or_(
             DataSource.name.ilike(f"%{search}%"),
-            Dataset.id_in_origin.ilike(f"%{search}%"),
+            Dataset.id_in_data_source.ilike(f"%{search}%"),
             File.name.ilike(f"%{search}%"),
             TopologyFile.atom_number.ilike(f"%{search}%"),
             TopologyFile.has_protein.ilike(f"%{search}%"),
@@ -172,14 +172,17 @@ def get_mdp_files_for_datatables(
             ParameterFile.dt.label("dt"),
             ParameterFile.nsteps.label("nsteps"),
             ParameterFile.temperature.label("temperature"),
+            ParameterFile.thermostat,
+            ParameterFile.barostat,
+            ParameterFile.integrator,
             File.name.label("file_name"),
-            Dataset.id_in_origin.label("dataset_id_in_origin"),
-            Dataset.url.label("dataset_url"),
+            Dataset.id_in_data_source.label("dataset_id_in_origin"),
+            Dataset.url_in_data_source.label("dataset_url"),
             DataSource.name.label("dataset_origin"),
         )
         .join(File, ParameterFile.file_id == File.file_id)
         .join(Dataset, File.dataset_id == Dataset.dataset_id)
-        .join(DataSource, Dataset.origin_id == DataSource.origin_id)
+        .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
     )
 
     if dataset_id is not None:
@@ -200,8 +203,11 @@ def get_mdp_files_for_datatables(
     if search is not None:
         statement = statement.where(or_(
             DataSource.name.ilike(f"%{search}%"),
-            Dataset.id_in_origin.ilike(f"%{search}%"),
+            Dataset.id_in_data_source.ilike(f"%{search}%"),
             File.name.ilike(f"%{search}%"),
+            ParameterFile.thermostat.ilike(f"%{search}%"),
+            ParameterFile.barostat.ilike(f"%{search}%"),
+            ParameterFile.integrator.ilike(f"%{search}%"),
         ))
 
     with Session(engine) as session:
@@ -227,13 +233,13 @@ def get_xtc_files_for_datatables(
             TrajectoryFile.atom_number,
             TrajectoryFile.frame_number,
             File.name.label("file_name"),
-            Dataset.id_in_origin.label("dataset_id_in_origin"),
-            Dataset.url.label("dataset_url"),
+            Dataset.id_in_data_source.label("dataset_id_in_origin"),
+            Dataset.url_in_data_source.label("dataset_url"),
             DataSource.name.label("dataset_origin"),
         )
         .join(File, TrajectoryFile.file_id == File.file_id)
         .join(Dataset, File.dataset_id == Dataset.dataset_id)
-        .join(DataSource, Dataset.origin_id == DataSource.origin_id)
+        .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
     )
 
     if dataset_id is not None:
@@ -254,7 +260,7 @@ def get_xtc_files_for_datatables(
     if search is not None:
         statement = statement.where(or_(
             DataSource.name.ilike(f"%{search}%"),
-            Dataset.id_in_origin.ilike(f"%{search}%"),
+            Dataset.id_in_data_source.ilike(f"%{search}%"),
             File.name.ilike(f"%{search}%"),
             TrajectoryFile.atom_number.ilike(f"%{search}%"),
             TrajectoryFile.frame_number.ilike(f"%{search}%"),
