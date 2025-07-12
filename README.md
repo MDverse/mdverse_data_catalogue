@@ -3,7 +3,7 @@
 ## Setup environment
 
 We use [uv](https://docs.astral.sh/uv/getting-started/installation/)
-to manage dependencies and the project environment.
+to manage dependencies and the project software environment.
 
 Clone the GitHub repository:
 
