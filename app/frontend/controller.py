@@ -47,3 +47,11 @@ async def read_index(request: Request):
             "datasets_plot_div": datasets_plot_div,
         }
     )
+
+
+@router.get("/about", response_class=HTMLResponse)
+async def show_about_page(request: Request):
+    return templates.TemplateResponse(
+        "about_page.html",
+        {"request": request}
+    )
