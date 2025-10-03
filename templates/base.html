@@ -1,12 +1,12 @@
 <!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="en" class="theme-light">
+<html lang="en">
 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/static/favicon.png" type="image/x-icon">
-  <title>{% block title %}MDverse data explorer{% endblock %}</title>
+  <title>{% block title %}MDverse data catalogue{% endblock %}</title>
 
   <!-- Bulma CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
@@ -35,7 +35,6 @@
           MDverse
         </a>
         <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbar-main">
-                <span aria-hidden=" true"></span>
           <span aria-hidden="true"></span>
           <span aria-hidden="true"></span>
           <span aria-hidden="true"></span>
@@ -44,69 +43,30 @@
       </div>
       <div id="navbar-main" class="navbar-menu">
         <div class="navbar-start">
-          <a class="navbar-item" href="/">
-            Home
-          </a>
-          <a class="navbar-item" href="/datasets">
-            Datasets
-          </a>
-          <a class="navbar-item" href="/file_types">
-            File types
-          </a>
-          <a class="navbar-item" href="/file_types/gro">
-            GRO files
-          </a>
-          <a class="navbar-item" href="/file_types/mdp">
-            MDP files
-          </a>
-        </div>
-        <div class="navbar-end">
+          <a class="navbar-item" href="/datasets">Datasets</a>
           <div class="navbar-item has-dropdown is-hoverable">
-            <a class="navbar-link">
-              Theme
-            </a>
+            <a class="navbar-link">Files</a>
             <div class="navbar-dropdown is-right">
-              <a class="navbar-item" id="light-theme">Light</a>
-              <a class="navbar-item" id="dark-theme">Dark</a>
-            </div>
+              <a class="navbar-item" href="/file_types">All types</a>
+              <a class="navbar-item" href="/file_types/gro">GRO files</a>
+              <a class="navbar-item" href="/file_types/mdp">MDP files</a>
+            </div>   
           </div>
         </div>
+      </div>
+      <div class="navbar-end">
+        <a class="navbar-item" href="/about">About</a> 
       </div>
     </nav>
   </header>
   <main class="content container">
     {% block main %}{% endblock %}
   </main>
-  <footer class="footer">
-    <div class="content has-text-centered">
-      <p>
-        <strong>MDverse</strong> 2025.
-      </p>
-    </div>
+  <footer class="footer has-text-centered mt-auto">
+    <strong>MDverse</strong> 2025.
   </footer>
 
 {% block script_extra %}
-<!-- Theme selector javascript-->
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const root = document.documentElement;
-
-  function switchTheme(t) {
-    root.setAttribute('data-theme', t);// Bulma
-    root.classList.toggle('dark', t === 'dark');// DataTables
-    localStorage.setItem('theme', t);
-  }
-
-  /* ------------ initial load ----------------- */
-  const saved = localStorage.getItem('theme');
-  const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  switchTheme(saved ?? system);
-
-  /* ------------ dropdown hooks --------------- */
-  document.getElementById('light-theme').onclick = () => switchTheme('light');
-  document.getElementById('dark-theme').onclick  = () => switchTheme('dark');
-});
-</script>
 {% endblock %}
 </body>
 
