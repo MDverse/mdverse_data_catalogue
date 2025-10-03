@@ -30,7 +30,7 @@ cp xxx/db_schema.py app/db_schema.py
 
 ### Developpment mode
 
-To launch the FastAPI web app, run:
+Run the FastAPI web app in dev mode:
 
 ```bash
 uv run fastapi dev app/main.py
