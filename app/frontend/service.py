@@ -245,8 +245,8 @@ def create_files_plot():
 
     p = figure(
         x_range=data['year'],
-        height=500,
-        width=800,
+        height=600,
+        width=1000,
         title="Number of files per year per data repository",
         tooltips=[
             ("Year", "@year"),
@@ -266,9 +266,9 @@ def create_files_plot():
         color=colors,
         legend_label=repositories
     )
-    p.xaxis.axis_label="Year"
-    p.yaxis.axis_label="Number of files"
-    p.yaxis.formatter=NumeralTickFormatter(format="0,0")
+    p.xaxis.axis_label = "Year"
+    p.yaxis.axis_label = "Number of files"
+    p.yaxis.formatter = NumeralTickFormatter(format="0,0")
 
     p.title.text_font_size = "14pt"
     p.xaxis.axis_label_text_font_size = "12pt"
@@ -323,8 +323,8 @@ def create_datasets_plot():
 
     p = figure(
         x_range=data['year'],
-        height=500,
-        width=800,
+        height=600,
+        width=1000,
         title="Number of datasets per year per data repository",
         tooltips=[
             ("Year", "@year"),

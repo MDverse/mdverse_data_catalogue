@@ -31,55 +31,55 @@
 {% block main %}
 
 
-<section class="section">
-    <section class="hero is-medium py-6" style="background-image: url('../static/index_bg.svg'); background-size: cover; background-position: center; background-repeat: no-repeat; color: rgb(0, 0, 0);">
+<section class="section pt-0">
+    <section id="hero-welcome" class="hero is-medium py-6">
         <div class="hero-body has-text-centered">
-            <h2 class="title is-1 is-spaced">Welcome to MDverse!</h2>
-            <p class="subtitle has-text-weight-bold">A simple way to explore and reuse molecular dynamics data</p>
+            <p class="title is-size-1">Welcome to MDverse!</p>
+            <p class="subtitle has-text-weight-semibold">The data catalogue of molecular dynamics simulations.</p>
         </div>
     </section>
 
     <div class="content pt-4" style="overflow-wrap: break-word;">
         <p>
-            MDverse is a platform designed to facilitate the exploration and reuse of datasets related to molecular dynamics (MD) simulations.
+            MDverse is a data catalogue that index and annotate molecular dynamics (MD) simulations. See <a href="/about">about</a> for more informations.
         </p>
     </div>
-    <nav class="level py-6 mb-2 has-background-white-ter">
+    <nav class="level py-4 has-background-white-bis">
         <div class="level-item has-text-centered">
             <div>
-            <p class="title">{{ total_count.number_of_datasets }}</p>
-            <p class="subtitle">Datasets</p>
+                <p class="subtitle">Datasets</p>
+                <p class="title">{{ total_count.number_of_datasets }}</p>
             </div>
         </div>
         <div class="level-item has-text-centered">
             <div>
-            <p class="title">{{ total_count.total_files }}</p>
-            <p class="subtitle">Files</p>
+                <p class="subtitle">Files</p>
+                <p class="title">{{ total_count.total_files }}</p>
             </div>
         </div>
         <div class="level-item has-text-centered">
             <div>
-            <p class="title">{{ banner_stats.total_topology_files }}</p>
-            <p class="subtitle">Structures</p>
+                <p class="subtitle">Structures</p>
+                <p class="title">{{ banner_stats.total_topology_files }}</p>
             </div>
         </div>
         <div class="level-item has-text-centered">
             <div>
-            <p class="title">{{ banner_stats.total_trajectory_files }}</p>
-            <p class="subtitle">Trajectories</p>
+                <p class="subtitle">Trajectories</p>
+                <p class="title">{{ banner_stats.total_trajectory_files }}</p>
             </div>
         </div>
         <div class="level-item has-text-centered">
             <div>
-            <p class="title">{{ banner_stats.total_data_sources }}</p>
-            <p class="subtitle">Sources</p>
+                <p class="subtitle">Data sources</p>
+                <p class="title">{{ banner_stats.total_data_sources }}</p>
             </div>
         </div>
     </nav>
 
-    <div class="fixed-grid has-5-cols">
-        <div class="grid">
-            <div class="cell is-col-span-3">
+    <div class="card">
+        <div class="card-content">
+            <div class="content">
                 <table id="SummaryTable" class="table is-striped is-hoverable is-size-8">
                     <thead>
                         <tr>
@@ -119,17 +119,12 @@
                     </tfoot>
                 </table>
             </div>
-
-            <div class="cell is-col-span-2">
-            <!-- Display the wordcloud image -->
-                <figure class="image">
-                    <img src="/static/wordcloud.png" alt="Wordcloud" width="100%"/>
-                </figure>
-            </div>
-
-            <div class="cell is-col-span-5">
-                <!-- Toggle buttons for plots -->
-                <div style="text-align: center; margin-top: 20px;">
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-content">
+            <div class="content">
+                <div style="text-align: center;">
                     <button id="filesBtn" class="toggle-btn active">Number of files per year</button>
                     <button id="datasetsBtn" class="toggle-btn">Number of datasets per year</button>
                 </div>
@@ -137,11 +132,11 @@
                 <!-- Plot container using Flexbox to center child elements -->
                 <div class="plot-section" style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
                     <!-- By default, show the files plot -->
-                    <div id="filesPlot" style="width: 800px;">
+                    <div id="filesPlot" style="width: 1000px;">
                         {{ files_plot_div | safe }}
                     </div>
                     <!-- The datasets plot is hidden by default -->
-                    <div id="datasetsPlot" style="width: 800px; display: none;">
+                    <div id="datasetsPlot" style="width: 1000px; display: none;">
                         {{ datasets_plot_div | safe }}
                     </div>
                 </div>
@@ -150,9 +145,16 @@
                 {{ files_plot_script | safe }}
                 {{ datasets_plot_script | safe }}
             </div>
-
         </div>
     </div>
+    <div class="card">
+        <div class="card-image">
+            <figure class="image">
+                <img src="/static/wordcloud.png" alt="Wordcloud of words datasets" width="100%"/>
+            </figure>
+        </div>
+    </div>
+
     <section class="section is-spaced has-background-white-ter">
         <h3 class="title is-3 has-text-centered">Developments</h3>
         <div class="grid has-2-cols has-text-centered py-4 is-primary">
@@ -166,7 +168,6 @@
     
 </section>
 {% endblock %}
-
 
 {% block script_extra %}
     <!-- JavaScript to toggle the plots -->

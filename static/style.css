@@ -10,3 +10,27 @@ body {
     padding-top: 30px;
     padding-bottom: 30px;
 }
+
+/* Semi-transparent image in the index page */
+/* https://coder-coder.com/background-image-opacity/ */
+#hero-welcome { 
+    position: relative; 
+    /* height: 100vh; */
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#hero-welcome::before {
+    content: "";
+    background-image: url("/static/index_bg.svg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    bottom: 0px;
+    left: 0px;
+    opacity: 30%;
+}
