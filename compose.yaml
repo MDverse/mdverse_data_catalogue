@@ -2,8 +2,13 @@ services:
   mdverse:
     # Build the image from the Dockerfile in the current directory
     build: .
-    image: mdverse:latest
     restart: unless-stopped
     # Host the FastAPI application on port 8000
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      start_period: 20s
+      interval: 30s
+      timeout: 15s
+      retries: 3
