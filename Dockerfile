@@ -38,7 +38,7 @@ COPY ./pyproject.toml .
 COPY ./uv.lock .
 COPY ./app ./app
 COPY ./templates ./templates
-COPY ./static ./static
+COPY --chown=nonrootuser:nonrootuser ./static ./static
 COPY ./database.db .
 
 # Create a virtual environment and install dependencies
@@ -48,4 +48,5 @@ RUN uv sync --locked --no-dev
 #ENV PATH="/opt/.venv/bin:$PATH"
 
 # Run the FastAPI application
+# by defaut, FastAPI runs on port 8000
 CMD ["uv", "run", "fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--proxy-headers"]
