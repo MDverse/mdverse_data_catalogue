@@ -58,7 +58,7 @@ def get_list_of_files_for_a_file_type(file_type: str) -> pd.DataFrame:
     """
     # Create an alias for the parent file
     ParentFile = aliased(File)
-    
+
     # Define a CASE expression: if file is from a zip, then use parent's URL, else use file.url
     file_url_expr = case(
         (File.is_from_zip_file == True, ParentFile.url),
@@ -70,6 +70,7 @@ def get_list_of_files_for_a_file_type(file_type: str) -> pd.DataFrame:
             select(
                 Dataset.id_in_data_source.label("dataset_id"),
                 DataSource.name.label("dataset_origin"),
+                Dataset.date_created.label("date_created"),
                 File.name.label("file_name"),
                 File.size_in_bytes.label("file_size_in_bytes"),
                 File.is_from_zip_file.label("is_file_from_zip_file"),
