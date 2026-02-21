@@ -1,0 +1,20 @@
+keywords:
+- molecular dynamics
+- gromacs
+
+file_types:
+- type: gro
+  keywords: none
+- type: mdp
+  keywords: keywords
+- type: itp
+  keywords: keywords
+- type: zip
+  keywords: keywords
+
+excluded_files_starting_with:
+- "."
+
+excluded_paths_containing:
+- "__MACOSX"
+- ".git"
