@@ -12,6 +12,20 @@ from urllib.parse import urlparse
 import click
 import httpx
 import loguru
+from mdverse_models.dataset import DatasetMetadata
+from mdverse_models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.simulation import (
+    ExternalIdentifier,
+    ForceFieldModel,
+    Molecule,
+    Software,
+)
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.logger import create_logger
 from ..core.network import (
@@ -21,15 +35,6 @@ from ..core.network import (
     make_http_request_with_retries,
 )
 from ..core.toolbox import print_statistics
-from ..models.dataset import DatasetMetadata
-from ..models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
-from ..models.scraper import ScraperContext
-from ..models.simulation import ExternalIdentifier, ForceFieldModel, Molecule, Software
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
-)
 
 MDDB_NODES = {
     # INRIA node.
@@ -285,7 +290,7 @@ def fetch_uniprot_protein_name(
         # See for instance; https://rest.uniprot.org/uniprotkb/Q16968
         if submission_name and isinstance(submission_name, list):
             protein_name = submission_name[0].get("fullName", {}).get("value")
-        # Or a dictionnary.
+        # Or a dictionary.
         # See for instance: https://rest.uniprot.org/uniprotkb/Q51760
         elif submission_name and isinstance(submission_name, dict):
             protein_name = submission_name.get("fullName", {}).get("value")
