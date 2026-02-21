@@ -9,6 +9,20 @@ import click
 import httpx
 import loguru
 from bs4 import BeautifulSoup
+from mdverse_models.dataset import DatasetMetadata
+from mdverse_models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.simulation import (
+    ExternalIdentifier,
+    ForceFieldModel,
+    Molecule,
+    Software,
+)
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.logger import create_logger
 from ..core.network import (
@@ -18,15 +32,6 @@ from ..core.network import (
     make_http_request_with_retries,
 )
 from ..core.toolbox import print_statistics
-from ..models.dataset import DatasetMetadata
-from ..models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
-from ..models.scraper import ScraperContext
-from ..models.simulation import ExternalIdentifier, ForceFieldModel, Molecule, Software
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
-)
 
 INDEX_URL = "https://www.dsimb.inserm.fr/ATLAS/"
 BASE_API_URL = "https://www.dsimb.inserm.fr/ATLAS/api"
