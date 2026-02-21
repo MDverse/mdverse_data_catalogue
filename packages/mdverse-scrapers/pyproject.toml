@@ -1,0 +1,21 @@
+[project]
+name = "mdverse-scrapers"
+version = "0.1.0"
+description = "MDverse scrapers"
+requires-python = ">=3.12"
+dependencies = [
+    "beautifulsoup4>=4.13.3",
+    "pycurl>=7.45.7",
+    "selenium>=4.40.0",
+    "html5lib>=1.1",
+    "httpx[http2]>=0.28.1",
+    "certifi>=2026.1.4",
+]
+
+[project.scripts]
+scrape-zenodo = "scrapers.scrapers.zenodo:main"
+scrape-figshare = "scrapers.scrapers.figshare:main"
+scrape-nomad = "scrapers.scrapers.nomad:main"
+scrape-atlas = "scrapers.scrapers.atlas:main"
+scrape-gpcrmd = "scrapers.scrapers.gpcrmd:main"
+scrape-mddb = "scrapers.scrapers.mddb:main"

@@ -5,9 +5,9 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from mdverse_scrapers.models.dataset import DatasetMetadata
-from mdverse_scrapers.models.date import DATETIME_FORMAT
-from mdverse_scrapers.models.enums import DatasetSourceName
+from mdverse_models.dataset import DatasetMetadata
+from mdverse_models.date import DATETIME_FORMAT
+from mdverse_models.enums import DatasetSourceName
 
 
 # --------------------------------------
