@@ -13,6 +13,14 @@ import click
 import httpx
 import loguru
 from bs4 import BeautifulSoup
+from mdverse_models.enums import DatasetSourceName
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.simulation import ForceFieldModel, Molecule, Software
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.logger import create_logger
 from ..core.network import (
@@ -23,14 +31,6 @@ from ..core.network import (
     retrieve_file_size_from_http_head_request,
 )
 from ..core.toolbox import print_statistics
-from ..models.enums import DatasetSourceName
-from ..models.scraper import ScraperContext
-from ..models.simulation import ForceFieldModel, Molecule, Software
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
-)
 
 BASE_GPCRMD_URL = "https://www.gpcrmd.org/api/search_all"
 
@@ -181,22 +181,22 @@ def _extract_molecules_from_lines(lines: list[str]) -> list[Molecule] | None:
     capture = False
 
     for line in lines:
-        line = line.strip()
+        clean_line = line.strip()
 
         # Skip empty lines
-        if not line:
+        if not clean_line:
             continue
 
         # Start capturing after the "Number of molecules" header
-        if "Number of molecules" in line:
+        if "Number of molecules" in clean_line:
             capture = True
             continue
 
         if capture:
-            # Stop when the expected "Name: number" pattern is no longuer found.
-            if ":" not in line or "Total" in line:
+            # Stop when the expected "Name: number" pattern is no longer found.
+            if ":" not in clean_line or "Total" in clean_line:
                 break
-            name, count = line.split(":", 1)
+            name, count = clean_line.split(":", 1)
             # Stop if the count is not a valid integer.
             if not count.strip().isdigit():
                 break

@@ -10,6 +10,14 @@ import loguru
 import pandas as pd
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from mdverse_models.enums import DatasetSourceName
+from mdverse_models.file import FileMetadata
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.logger import create_logger
 from ..core.toolbox import (
@@ -21,14 +29,6 @@ from ..core.toolbox import (
     remove_duplicates_in_list_of_dicts,
     remove_excluded_files,
     strip_html,
-)
-from ..models.enums import DatasetSourceName
-from ..models.file import FileMetadata
-from ..models.scraper import ScraperContext
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
 )
 
 

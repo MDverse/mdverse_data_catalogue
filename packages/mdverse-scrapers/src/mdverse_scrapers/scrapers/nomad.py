@@ -12,6 +12,15 @@ from typing import Any
 import click
 import httpx
 import loguru
+from mdverse_models.dataset import DatasetMetadata
+from mdverse_models.enums import DatasetSourceName
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.simulation import Molecule, Software
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.logger import create_logger
 from ..core.network import (
@@ -21,15 +30,6 @@ from ..core.network import (
     make_http_request_with_retries,
 )
 from ..core.toolbox import print_statistics
-from ..models.dataset import DatasetMetadata
-from ..models.enums import DatasetSourceName
-from ..models.scraper import ScraperContext
-from ..models.simulation import Molecule, Software
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
-)
 
 BASE_NOMAD_URL = "http://nomad-lab.eu/prod/v1/api/v1"
 JSON_PAYLOAD_NOMAD_REQUEST: dict[str, Any] = {
@@ -351,7 +351,7 @@ def extract_time_step(
     Returns
     -------
     list[float] | None
-        A list containined the time step in fs, or None if not found.
+        A list contained the time step in fs, or None if not found.
     """
     time_step = None
     try:
