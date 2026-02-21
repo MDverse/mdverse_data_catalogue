@@ -17,7 +17,13 @@ So we don't expect files to have an individual size above 20 GB.
 
 ### Token
 
-Figshare requires a token to access its API: [How to get a personnal token](https://info.figshare.com/user-guide/how-to-get-a-personal-token/)
+Figshare requires a token to access its API: [How to get a personal token](https://info.figshare.com/user-guide/how-to-get-a-personal-token/)
+
+tore this token in a file `.env` (this file is automatically ignored by git):
+
+```none
+FIGSHARE_TOKEN=YOUR-FIGSHARE-TOKEN
+```
 
 ### Base URL
 
@@ -29,7 +35,8 @@ Figshare requires a token to access its API: [How to get a personnal token](http
 
 ### Rate limiting
 
-> We do not have automatic rate limiting in place for API requests. However, we do carry out monitoring to detect and mitigate abuse and prevent the platform's resources from being overused. We recommend that clients use the API responsibly and do not make more than one request per second. We reserve the right to throttle or block requests if we detect abuse.
+> We do not have automatic rate limiting in place for API requests. However, we do carry out monitoring to detect and mitigate abuse and prevent the platform's resources from being overused.
+> We recommend that clients use the API responsibly and do not make more than one request per second. We reserve the right to throttle or block requests if we detect abuse.
 
 Source: <https://docs.figshare.com/#figshare_documentation_api_description_rate_limiting>
 

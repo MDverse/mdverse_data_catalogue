@@ -11,13 +11,13 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
 Clone this repository:
 
 ```bash
-git clone https://github.com/MDverse/mdws.git
+git clone https://github.com/MDverse/mdverse_data_catalogue.git
 ```
 
 Move to the new directory:
 
 ```bash
-cd mdws
+cd mdverse_data_catalogue
 ```
 
 Create a virtual environment:
@@ -26,124 +26,29 @@ Create a virtual environment:
 uv sync
 ```
 
-## Scrape Zenodo
+## Scrape MD dataset repositories
 
-Have a look to the notes regarding [Zenodo](docs/zenodo.md) and how its API works.
+Currently, we are scraping the following data repositories:
 
-Create a token here: <https://zenodo.org/account/settings/applications/tokens/new/>
-and store it in the file `.env`:
+- Zenodo [docs](docs/zenodo.md)
+- Figshare [docs](docs/figshare.md)
+- ATLAS
+- NOMAD
+- GPCRmd
+- MDDB
 
-```none
-ZENODO_TOKEN=YOUR-ZENODO-TOKEN
-```
+Soon:
 
-This file is automatically ignored by git and won't be pushed on GitHub.
+- OSF [docs](docs/osf.md)
 
-Scrape Zenodo for MD-related datasets and files:
+### Scraping Zenodo, Figshare and OSF
 
-```bash
-uv run scrape-zenodo --query-file params/query.yml --output-dir data
-```
+To scrape Zenodo, Figshare and OSF, you need a token. Because these data repositories are generic data repositiries,
+you also need a query parameters (in `params/`).
 
-Scrape Zenodo with a small query, for development or demo purpose:
+Note that "[false positives](docs/false_positives.md)" are removed during the scraping process.
 
-```bash
-uv run scrape-zenodo --query-file params/query_dev.yml --output-dir tmp
-```
-
-The scraping takes some time (about 5 hours). A mechanism has been set up to avoid overloading the Zenodo API. Be patient.
-
-Eventually, the scraper will produce two files: `zenodo_datasets.parquet` and `zenodo_files.parquet` :sparkles:
-
-Note that "[false positives](docs/false_positives.md)" have been removed in the scraping process.
-
-## Scrape Figshare
-
-Have a look to the notes regarding [Figshare](docs/figshare.md) and how its API works.
-
-Scrape Figshare for MD-related datasets and files:
-
-```bash
-uv run scrape-figshare --query-file params/query.yml --output-dir data
-```
-
-Scrape Figshare with a small query, for development or demo purpose:
-
-```bash
-uv run scrape-figshare --query-file params/query_dev.yml --output-dir tmp
-```
-
-The scraping takes some time (about 5 hours). Be patient.
-
-Eventually, the scraper will produce two files: `figshare_datasets.parquet` and `figshare_files.parquet` :sparkles:
-
-## Scrape OSF
-
-Have a look to the notes regarding [OSF](docs/osf.md) and its API.
-
-Create a token here: <https://osf.io/settings/tokens> (select the `osf.full_read` scope)
-and store it in the file `.env`:
-
-```none
-OSF_TOKEN=<YOUR OSF TOKEN HERE>
-```
-
-This file is ignored by git and won't be published on GitHub.
-
-Scrape OSF for MD-related datasets and files:
-
-```bash
-uv run scripts/scrape_osf.py --query params/query.yml --output data
-```
-
-Scrape OSF with a small query, for development or demo purpose:
-
-```bash
-uv run scripts/scrape_osf.py --query params/query_dev.yml --output tmp
-```
-
-The scraping takes some time (~ 30 min). Be patient.
-
-Eventually, the scraper will produce three files: `osf_datasets.tsv`, `osf_datasets_text.tsv` and `osf_files.tsv` :sparkles:
-
-## Scrape NOMAD
-
-Have a look to the notes regarding [NOMAD](docs/nomad.md) and its API.
-
-Scrape NOMAD:
-
-```bash
-uv run scrape-nomad --output-dir data
-```
-
-This command will:
-
-1. Search for molecular dynamics entries and files through the NOMAD API.
-2. Parse metadata and validate them using the Pydantic models
-   `DatasetMetadata` and `FileMetadata`.
-3. Save validated files and datasets metadata.
-
-The scraping takes about 2 h.
-
-## Scrape GPCRmd
-
-Scrape GPCRmd to collect molecular dynamics (MD) datasets and files related to G-protein-coupled receptors (GPCRs), a major family of membrane proteins and common drug targets.
-
-```bash
-uv run scrape-gpcrmd --output-dir data
-```
-
-This command will:
-
-1. Fetch all available datasets from GPCRMD.
-2. Parse their metadata and validate them using the Pydantic models
-   `DatasetMetadata` and `FileMetadata`.
-3. Save validated dataset metadatas to `data/gpcrmd/gpcrmd_datasets.parquet`.
-4. Save validated file metadatas to `data/gpcrmd/gpcrmd_files.parquet`.
-
-> The scraping takes approximately 1 hour and 30 minutes.
-
-## Scrape NMRLipids Databank
+### Scrape NMRLipids Databank
 
 Scrape the NMRLipids Databank to extract metadata from molecular dynamics (MD) simulations.
 
@@ -170,24 +75,13 @@ This command will:
 4. Validate entries using Pydantic models
 5. Save the extracted metadata to Parquet files
 
-## Scrape MDDB
+## Automation
 
-See [MDDB](docs/mddb.md) to understand how with use scrape metadata from MDDB.
+You can run scrape all data repositories at once with:
 
-Scrape MDDB to collect molecular dynamics (MD) datasets and files:
-
-```bash
-uv run scrape-mddb --output-dir data
+```sh
+bash scripts/scrape_all.sh
 ```
-
-This command will:
-
-1. List all datasets and files through the main MDposit nodes.
-2. Parse metadata and validate them using the Pydantic models
-   `DatasetMetadata` and `FileMetadata`.
-3. Save validated files and datasets metadata.
-
-The scraping process takes about 2 hours, depending on your network connection and hardware.
 
 ## Analyze Gromacs mdp and gro files
 

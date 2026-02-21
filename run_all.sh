@@ -1,20 +1,8 @@
 #! /usr/bin/env bash
 
-echo "Updating Python virtual environment"
+./scripts/scrape_all.sh
 
-uv sync
 
-echo "SCRAPING ZENODO"
-
-uv run scripts/scrap_zenodo.py --query params/query.yml --output data
-
-echo "SCRAPING FIGSHARE"
-
-uv run scripts/scrap_figshare.py --query params/query.yml --output data
-
-echo "SCRAPING OSF"
-
-uv run scripts/scrap_osf.py --query params/query.yml --output data
 
 
 echo "DOWNLOADING GROMACS .MDP and .GRO FILES FROM ZENODO"
