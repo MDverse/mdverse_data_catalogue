@@ -8,8 +8,14 @@ from pathlib import Path
 import click
 import loguru
 from dotenv import load_dotenv
-
-from mdverse_scrapers.models.file import FileMetadata
+from mdverse_models.enums import DatasetSourceName
+from mdverse_models.file import FileMetadata
+from mdverse_models.scraper import ScraperContext
+from mdverse_models.utils import (
+    export_list_of_models_to_parquet,
+    normalize_datasets_metadata,
+    normalize_files_metadata,
+)
 
 from ..core.figshare_api import FigshareAPI
 from ..core.logger import create_logger
@@ -22,13 +28,6 @@ from ..core.toolbox import (
     read_query_file,
     remove_excluded_files,
     strip_html,
-)
-from ..models.enums import DatasetSourceName
-from ..models.scraper import ScraperContext
-from ..models.utils import (
-    export_list_of_models_to_parquet,
-    normalize_datasets_metadata,
-    normalize_files_metadata,
 )
 
 
