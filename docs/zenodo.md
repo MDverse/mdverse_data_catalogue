@@ -16,7 +16,14 @@ So we don't expect much files to have an individual size above 50 GB.
 
 ### Token
 
-Zenodo requires a token to access its API with higher rate limits. See "[Authentication](https://developers.zenodo.org/#authentication)" to get a token and "[Quickstart - Upload](https://developers.zenodo.org/#quickstart-upload)" to test it.
+Zenodo requires a token to access its API with higher rate limits. See "[Authentication](https://developers.zenodo.org/#authentication)" to get a token
+and "[Quickstart - Upload](https://developers.zenodo.org/#quickstart-upload)" to test it.
+
+Store this token in a file `.env` (this file is automatically ignored by git):
+
+```none
+ZENODO_TOKEN=YOUR-ZENODO-TOKEN
+```
 
 Example of direct API link for a given dataset: <https://zenodo.org/api/records/8183728>
 
@@ -48,7 +55,8 @@ resource_type.type:"dataset" AND filetype:"tpr"
 with keywords:
 
 ```none
-resource_type.type:"dataset" AND filetype:"mdp"  AND ("molecular dynamics" OR "molecular dynamic" OR "molecular-dynamics" OR "molecular-dynamic" OR "md trajectory" OR "md trajectories" OR "md simulation" OR "md simulations" OR "gromacs" OR "gromos" OR "namd" OR "amber" OR "desmond" OR "amber96" OR "amber99" OR "amber14" OR "charmm" OR "charmm27" OR "charmm36" OR "martini")
+resource_type.type:"dataset" AND filetype:"mdp"  AND ("molecular dynamics" OR "molecular dynamic" OR "molecular-dynamics" OR "molecular-dynamic" OR "md trajectory" OR "md trajectories"
+OR "md simulation" OR "md simulations" OR "gromacs" OR "gromos" OR "namd" OR "amber" OR "desmond" OR "amber96" OR "amber99" OR "amber14" OR "charmm" OR "charmm27" OR "charmm36" OR "martini")
 ```
 
 ### Search strategy
@@ -59,7 +67,7 @@ The API send the full records of datasets, including complete files metadata.
 
 ### Get metadata for a given dataset
 
-*For debugging purpose only, since all information is already provided in the search results*
+For debugging purpose only, since all information is already provided in the search results.
 
 - Endpoint: `/api/records/{dataset_id}`
 - HTTP method: GET
@@ -77,7 +85,8 @@ Many MD simulation files are archived in zip files.
 Query:
 
 ```none
-resource_type.type:"dataset" AND filetype:"zip"  AND ("molecular dynamics" OR "molecular dynamic" OR "molecular-dynamics" OR "molecular-dynamic" OR "md trajectory" OR "md trajectories" OR "md simulation" OR "md simulations" OR "gromacs" OR "gromos" OR "namd" OR "amber" OR "desmond" OR "amber96" OR "amber99" OR "amber14" OR "charmm" OR "charmm27" OR "charmm36" OR "martini")
+resource_type.type:"dataset" AND filetype:"zip"  AND ("molecular dynamics" OR "molecular dynamic" OR "molecular-dynamics" OR "molecular-dynamic" OR "md trajectory" OR "md trajectories"
+OR "md simulation" OR "md simulations" OR "gromacs" OR "gromos" OR "namd" OR "amber" OR "desmond" OR "amber96" OR "amber99" OR "amber14" OR "charmm" OR "charmm27" OR "charmm36" OR "martini")
 ```
 
 Example of datasets related to molecular dynamics with zip files:
@@ -112,13 +121,14 @@ Some zip file content are dense, with many folders and sub-folders.
 
 Examples:
 
-- For the dataset "[Input files and scripts for Hamiltonian replica-exchange molecular dynamics simulations of intrinsically disordered proteins using a software GROMACS patched with PLUMED](https://zenodo.org/record/4319228)": preview of the file [`hremd-idp.zip`](https://zenodo.org/record/4319228/preview/hremd-idp.zip).
+- For the dataset "[Input files and scripts for Hamiltonian replica-exchange molecular dynamics...](https://zenodo.org/record/4319228)": preview of the file [`hremd-idp.zip`](https://zenodo.org/record/4319228/preview/hremd-idp.zip).
 - For the dataset "[2DUV Machine Learning Protocol Code](https://zenodo.org/record/4444751/)": preview of the file [`code.zip`](https://zenodo.org/record/4444751/preview/code.zip).
 
-These complexe zip files are handled by the current implementation of the Zenodo scraper.
+These complex zip files are handled by the current implementation of the Zenodo scraper.
 
 #### Issues with zip file content
 
 Sometimes, zip file contents are not accessible.
 
-For the dataset "[G-Protein Coupled Receptor-Ligand Dissociation Rates and Mechanisms from tauRAMD Simulations](https://zenodo.org/record/5151217)": preview of the file [`Example_b2AR-alprenolol.zip`](https://zenodo.org/record/5151217/preview/Example_b2AR-alprenolol.zip) is not available, probably because the file is too large (5.4 GB).
+For the dataset "[G-Protein Coupled Receptor-Ligand...](https://zenodo.org/record/5151217)":
+preview of the file [`Example_b2AR-alprenolol.zip`](https://zenodo.org/record/5151217/preview/Example_b2AR-alprenolol.zip) is not available, probably because the file is too large (5.4 GB).

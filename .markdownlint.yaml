@@ -6,3 +6,4 @@
 MD013:
   # Number of characters
   line_length: 200
+  ignore_code_blocks: true
