@@ -5,8 +5,8 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from mdverse_scrapers.models.enums import DatasetSourceName
-from mdverse_scrapers.models.scraper import ScraperContext
+from mdverse_models.enums import DatasetSourceName
+from mdverse_models.scraper import ScraperContext
 
 
 def test_context_paths_are_created(tmp_path):
