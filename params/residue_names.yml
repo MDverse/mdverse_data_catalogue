@@ -1,0 +1,334 @@
+protein:
+- ALA
+- ARG
+- ASN
+- ASP
+- ASH   # protonated ASP
+- CYS
+- CYS2  # disulfide bonded CYS
+- GLN
+- GLU
+- GLH   # protonated GLU
+- GLY
+- HIS
+- HSD
+- HSE
+- ILE
+- LEU
+- LYS
+- LYSH  # protonated LYS
+- MET
+- PHE
+- PRO
+- SER
+- PYL
+- THR
+- TRP
+- TYR
+- VAL
+- ACE   # N-terminal acetyl group
+- NME   # C-terminal amide group
+- sG    # Glycine / SIRAH force field
+- sA    # Alanine / SIRAH force field
+- sV    # Valine / SIRAH force field
+- sL    # Leucine / SIRAH force field
+- sI    # Isoleucine / SIRAH force field
+- sP    # Proline / SIRAH force field
+- sF    # Phenylalanine / SIRAH force field
+- sW    # Tryptophan / SIRAH force field
+- sD    # Aspartic acid / SIRAH force field
+- sK    # Lysine / SIRAH force field
+- sR    # Arginine / SIRAH force field
+- sC    # Cysteine / SIRAH force field
+- sM    # Methionine / SIRAH force field
+- sS    # Serine / SIRAH force field
+- sT    # Threonine / SIRAH force field
+- sN    # Asparagine / SIRAH force field
+- sQ    # Glutamine / SIRAH force field
+- sHe   # Histidine / SIRAH force field
+- sY    # Tyrosine / SIRAH force field
+- sE    # Glutamic acid / SIRAH force field
+- HID   # Histidine / AMBER force field / Histidine with hydrogen on the delta nitrogen
+- HIE   # Histidine / AMBER force field / Histidine with hydrogen on the epsilon nitrogen
+- HIP   # Histidine / AMBER force field / Histidine with hydrogen on both nitrogens
+
+lipid:
+- POPC  # 1-palmitoyl-2-oleoyl-sn-glycero-3-phosphocholine
+- DPPC  # 1,2-dipalmitoyl-sn-glycero-3-phosphocholin
+- SDPC
+- SDPE
+- DLPC
+- DIPC
+- DUPC  # 1,2-di-docosahexaenoyl-sn-glycero-3-phosphocholine
+- DUPE
+- DUPS
+- DMPC
+- DSPC
+- DGPC  # http://cgmartini.nl/index.php/force-field-parameters/lipids2/351-lipid.html?dir=PC&lipid=DGPC
+- SOPC
+- POPE  # 1-palmitoyl-2-oleoyl-sn-glycero-3-phosphoethanolamin
+- PPCS
+- DPPE
+- DLPE
+- DIPE
+- DMPE
+- DSPE
+- SOPE
+- SOPS   # 1-stearoyl-2-oleoyl-sn-glycero-3-phosphatidylserine
+- SPCE
+- POPS   # 1-palmitoyl-2-oleoyl-sn-glycero-3-phosphatidylserine
+- POGS   # https://limonada.univ-reims.fr/lipids/lisp05010004/
+- POSM   # https://limonada.univ-reims.fr/lipids/lmsp03010040/
+- PODG   # https://limonada.univ-reims.fr/lipids/lmgl02010006/
+- POGL   # https://limonada.univ-reims.fr/topologies/303/
+- POCE   # https://limonada.univ-reims.fr/lipids/lisp02010007/
+- OIPC   # https://limonada.univ-reims.fr/lipids/lmgp01010895/
+- DPCE   # https://limonada.univ-reims.fr/lipids/lisp02010001/
+- POG3   # https://limonada.univ-reims.fr/lipids/lisp06010012/
+- PNG1   # https://limonada.univ-reims.fr/lipids/lisp06010003/
+- PNG3   # https://limonada.univ-reims.fr/lipids/lisp06010007/
+- PAPS   # https://limonada.univ-reims.fr/lipids/lmgp03010038/
+- PUPE   # https://limonada.univ-reims.fr/lipids/lmgp02010095/
+- PDOPE  # https://limonada.univ-reims.fr/topologies/533/
+- PUPI   # https://limonada.univ-reims.fr/lipids/lmgp06010011/
+- SAPS   # https://limonada.univ-reims.fr/lipids/lmgp03010039/
+- PAPC   # https://limonada.univ-reims.fr/lipids/ligp01010001/
+- PIPC   # https://limonada.univ-reims.fr/lipids/lmgp01010594/
+- DPG3   # https://limonada.univ-reims.fr/lipids/lisp06010005/
+- PIPI
+- PIDG
+- PAPE
+- PIPE
+- PIP3
+- POP3
+- PIPS
+- PAPI
+- POPI
+- POP1
+- POP2
+- POPA
+- PIPA
+- PAPA
+- PUPA
+- PLPC
+- PVPE
+- PVPG   # 1-palmitoyl-2-vacenoyl-phosphatidyl-glycerol
+- PVCL2  # 1,10-palmitoyl-2,20-vacenoyl cardiolipin
+- PSUA
+- PEUA
+- PPPE   # 1-palmitoyl-2-palmitoleoyl-phosphatidylethanolamine
+- PCUA
+- PZPC
+- DEPC
+- DOPC   # 1,2-dioleoyl-sn-glycero-3-phosphocholine
+- DOPS
+- DAPC
+- DDPC
+- DOPE
+- DSUA
+- POPG
+- PADG
+- PEPC
+- PQPE
+- PQPS
+- DOPG
+- DIPS
+- DAPS
+- DBSM  # Martini
+- DXSM  # Martini
+- BNSM  # Martini
+- DPSM  # Martini
+- PGSM  # Martini
+- PNSM  # Martini
+- SM16  # N-palmitoyl-D-erythro-sphingosyl-phosphatidylcholine
+- SM18  # N-stearoyl-D-erythro-sphingosyl-phosphorylcholine
+- SM24  # N-lignoceroyl-D-erythro-sphingosyl-phosphatidylcholine
+- CHOL  # cholesterol
+- CHL1
+- CLs   # cardiolipins
+- CER16
+- PSM
+- PLA
+- DPP
+- OPC
+- SDS
+- LAL  # LIPID21 Lauroyl (12:0) https://ambermd.org/AmberModels_lipids.php
+- MY   # LIPID21 Myristoyl (14:0) https://ambermd.org/AmberModels_lipids.php
+- PA   # LIPID21 Palmitoyl (16:0) https://ambermd.org/AmberModels_lipids.php
+- SA   # LIPID21 Sphingosine (16:1) https://ambermd.org/AmberModels_lipids.php
+- OL   # LIPID21 Oleoyl (18:1 n-9) https://ambermd.org/AmberModels_lipids.php
+- ST   # LIPID21 Stearoyl (18:0) https://ambermd.org/AmberModels_lipids.php
+- AR   # LIPID21 Arachidonoyl (20:4) https://ambermd.org/AmberModels_lipids.php
+- DHA  # LIPID21 Docosahexaenoyl (22:6) https://ambermd.org/AmberModels_lipids.php
+- PC   # LIPID21 Phosphatidylcholine https://ambermd.org/AmberModels_lipids.php
+- PE   # LIPID21 Phosphatidylethanolamine https://ambermd.org/AmberModels_lipids.php
+- PS   # LIPID21 Phosphatidylserine https://ambermd.org/AmberModels_lipids.php
+- PGR  # LIPID21 Phosphatidylglyceroli R- https://ambermd.org/AmberModels_lipids.php
+- PGS  # LIPID21 Phosphatidylglyceroli S- https://ambermd.org/AmberModels_lipids.php
+- PH   # LIPID21 Phosphaditic acid https://ambermd.org/AmberModels_lipids.php
+- SPM  # LIPID21 Sphingomyelin https://ambermd.org/AmberModels_lipids.php
+- CHL  # LIPID21 Cholesterol https://ambermd.org/AmberModels_lipids.php
+
+nucleic:
+- RA5
+- RA3
+- RAN
+- RU5
+- RU3
+- RUN
+- RG5
+- RG3
+- RGN
+- RC5
+- RC3
+- RCN
+- DA5
+- DA3
+- DAN
+- DT5
+- DT3
+- DTN
+- DG5
+- DG3
+- DGN
+- DC5
+- DC3
+- DCN
+- RA
+- RU
+- RC
+- DA
+- DT
+- DG
+- DC
+- G5
+- A
+- U
+- G
+- C
+- rA
+- A3
+- A5
+- rC
+- C3
+- C5
+- rG
+- RG
+- G3
+- rU
+- U3
+- U5
+- T
+- dT
+- dA
+- dC
+- dG
+- 1MA
+- 5AA
+- P5P
+- 2MA
+- OMC
+- 5MC
+- CBV
+- 2MG
+- YG
+- 7MG
+- OMG
+- 1MG
+- M2G
+- H2U
+- PSU
+- OMU
+- UR3
+- 5MU
+- 5BU
+- 4SU
+- 6MA
+- 6AH    # N6-methyladenosine. Exemple in https://zenodo.org/record/6498021 (A1.zip 1M_A1_anti_fitAB/lam0/confout.gro)
+- DAX   # Adenine / SIRAH force field
+- DGX   # Guanine / SIRAH force field
+- DTX   # Thymine / SIRAH force field
+- DCX   # Cytosine / SIRAH force field
+
+glucid:
+- 0ZB
+- 3YB
+- 4YB
+- UYB
+- 4ZB
+- 0GB
+- 4GB
+- 0MA
+- 2MA
+- 3MA
+- 3MB
+- VMB
+- 0LB
+- 1LB
+- 2LB
+- 3LB
+- 4LB
+- 6LB
+- ZLB
+- YLB
+- XLB
+- WLB
+- VLB
+- ULB
+- TLB
+- SLB
+- RLB
+- QLB
+- PLB
+- 0MU
+- 1MU
+- 2MU
+- 3MU
+- 4MU
+- 0SA
+- 0FA
+- 3VA
+
+water_ion:
+- SOL
+- TIP3
+- TIP
+- W      # Martini water
+- WF     # Martini water antifreeze
+- WAT
+- HOH
+- K
+- Cl
+- CL
+- Cl-
+- CL-
+- CA
+- CAL
+- Cal
+- Na
+- NA
+- Na+
+- NA+
+- MG    # Magnesium ion / Mg2+
+- SOD   # Sodium ion from CHARMM36 force field. Example in https://zenodo.org/record/6526243 (prod.gro)
+- CLA   # Chloride ion from CHARMM36 force field. Example in https://zenodo.org/record/6526243 (prod.gro)
+- POT
+- K+
+- ZN    # Zinc ion / Zn2+
+- ION
+- NaW   # Sodium ion / SIRAH force field
+- KW    # Potassium ion / SIRAH force field
+- ClW   # Chloride ion / SIRAH force field
+- CaX   # Calcium ion / SIRAH force field
+- MgX   # Magnesium ion / SIRAH force field
+- ZnX   # Zinc ion / SIRAH force field
+- WT4   # Water model / SIRAH force field
+- WLS   # Water model (55 water molecules) / SIRAH force field
+- SUL
+- SO4
+
+
+ligand:
+- LIG
+- ATP
+- GOL  # Glycerol
