@@ -1,0 +1,4 @@
+[default]
+# https://github.com/crate-ci/typos/blob/master/docs/reference.md
+extend-ignore-re = ["NAMD"]
+extend-ignore-identifiers-re = []
