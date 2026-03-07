@@ -53,9 +53,8 @@ dev = [
 ]
 
 [tool.uv.sources]
-mdverse-scrapers = { workspace = true }
 mdverse-models = { workspace = true }
+mdverse-scrapers = { workspace = true }
 
 [tool.uv.workspace]
 members = [ "packages/*" ]
-
