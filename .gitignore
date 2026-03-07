@@ -5,6 +5,7 @@
 data/*
 !data/.gitkeep
 logs/*
+*.log
 
 # Result figures
 notebooks/*.png
