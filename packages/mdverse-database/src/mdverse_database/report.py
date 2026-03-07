@@ -1,10 +1,12 @@
+"""Report the number of rows and columns in each table of the database."""
+
 from pathlib import Path
 
 from loguru import logger
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from src.db_schema import (
+from .db_schema import (
     Author,
     Dataset,
     DataSource,
@@ -28,11 +30,7 @@ logger.add(
 
 
 def main():
-    """
-    This script reports the number of rows and columns in each table of the database.
-    To run this script, use the command:
-    uv run python report.py
-    """
+    """Report database usage."""
     # List of all the models you want to report on.
     models = [
         Dataset,

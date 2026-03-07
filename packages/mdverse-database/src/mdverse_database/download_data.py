@@ -1,3 +1,5 @@
+"""Download parquet files."""
+
 from pathlib import Path
 
 import requests
@@ -24,13 +26,12 @@ if not output_path.exists():
 
 
 def get_parquet_files():
-    """
-    Fetches and downloads all .parquet files
-    from Zenodo to a specified folder.
-    """
+    """Fetch and downloads all .parquet files.
 
+    From Zenodo to a specified folder.
+    """
     # Step 1: Fetch the JSON metadata
-    response = requests.get(ZENODO_API_URL)
+    response = requests.get(ZENODO_API_URL, timeout=10)
     response.raise_for_status()  # Raise an error if request fails
     data = response.json()
 
@@ -45,9 +46,8 @@ def get_parquet_files():
 
             # Step 3: Download and save each file
             print(f"Downloading {filename} to {OUTPUT_FOLDER}...\n")
-            file_response = requests.get(file_url)
-            with open(file_path, "wb") as f:
-                f.write(file_response.content)
+            file_response = requests.get(file_url, timeout=10)
+            Path(file_path).write_bytes(file_response.content)
             print(f"Saved: {file_path}")
 
 
