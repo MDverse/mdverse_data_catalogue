@@ -1,0 +1,44 @@
+[project]
+name = "my-project"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.7",
+    "fastparquet>=2024.11.0",
+    "loguru>=0.7.3",
+    "pandas>=2.2.3",
+    "pyarrow>=19.0.0",
+    "requests>=2.32.3",
+    "sqlmodel>=0.0.24",
+    "tqdm>=4.67.1",
+]
+
+[tool.ruff]
+# Set the maximum line length to 88, like Black.
+line-length = 88
+
+[tool.ruff.lint]
+# Ruff rules: https://docs.astral.sh/ruff/rules/
+select = [
+    "F",    # pyflakes
+    "E",    # pycodestyle Error
+    "W",    # pycodestle Warning
+    "I",    # isort
+    "B",    # bugbear
+    "C90",  # mccabe
+    "N",    # pep8-naming
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 79
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "pytest>=8.3.4",
+    "ruff>=0.9.4",
+]
+
