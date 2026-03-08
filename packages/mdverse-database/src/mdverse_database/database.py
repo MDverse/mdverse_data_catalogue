@@ -2,7 +2,9 @@
 
 from typing import Optional
 
+from sqlalchemy import Engine
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint, create_engine
+from sqlmodel.pool import StaticPool
 
 # ============================================================================
 
@@ -500,15 +502,57 @@ class AnnotationType(SQLModel, table=True):
 
 
 # ============================================================================
-# Engine
+# Load database.
 # ============================================================================
+def load(
+    sqlite_file_name: str = "database.db",
+    *,
+    in_memory: bool = False,
+    show_sql: bool = False,
+) -> Engine:
+    """Load the database..
 
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+    Returns
+    -------
+    Engine
+        The SQLAlchemy engine connected to the database.
+    """
+    # Define the SQLite URL
+    # with in memory option,
+    # https://sqlmodel.tiangolo.com/tutorial/fastapi/tests/#configure-the-in-memory-database
+    if in_memory:
+        print("Loading in-memory SQLite database.")
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+            echo=show_sql,
+        )
+    else:
+        print(f"Loading SQLite database from file: {sqlite_file_name}")
+        engine = create_engine(f"sqlite:///{sqlite_file_name}", echo=show_sql)
+    return engine
 
-engine = create_engine(sqlite_url)
 
+# ============================================================================
+# Create database and tables.
+# ============================================================================
+def create(
+    sqlite_file_name: str = "database.db",
+    *,
+    in_memory: bool = False,
+    show_sql: bool = False,
+) -> Engine:
+    """Create the database tables and relationship between tables.
 
-def create_db_and_tables():
-    """Create the database and tables."""
+    Returns
+    -------
+    Engine
+        The SQLAlchemy engine connected to the created database.
+    """
+    engine = load(
+        sqlite_file_name=sqlite_file_name, in_memory=in_memory, show_sql=show_sql
+    )
     SQLModel.metadata.create_all(engine)
+    print("Database and tables created.")
+    return engine

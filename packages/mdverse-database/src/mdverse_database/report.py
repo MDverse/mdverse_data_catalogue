@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from .db_schema import (
+from .database import (
     Author,
     Dataset,
     DataSource,
@@ -15,7 +15,7 @@ from .db_schema import (
     ParameterFile,
     TopologyFile,
     TrajectoryFile,
-    engine,
+    load,
 )
 
 # Log file format
@@ -31,6 +31,7 @@ logger.add(
 
 def main():
     """Report database usage."""
+    engine = load()
     # List of all the models you want to report on.
     models = [
         Dataset,
@@ -42,7 +43,6 @@ def main():
         ParameterFile,
         TrajectoryFile,
     ]
-
     with Session(engine) as session:
         for model in models:
             # Get the table name from the model's __tablename__ attribute.

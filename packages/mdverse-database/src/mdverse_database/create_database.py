@@ -2,13 +2,13 @@
 
 import time
 
-from .db_schema import create_db_and_tables
+from .database import create
 
 
 def main():
     """Create the database and tables."""
     start = time.perf_counter()
-    create_db_and_tables()
+    create()
     execution_time = time.perf_counter() - start
     print(f"Database and tables created in {execution_time:.2f} seconds")
 

@@ -4,16 +4,16 @@ import random
 import time
 
 import pandas as pd
-from sqlalchemy import func
+from sqlalchemy import Engine, func
 from sqlalchemy.orm import aliased
 from sqlmodel import Session, select
 
-from .db_schema import Dataset, DataSource, File, FileType, engine
+from .database import Dataset, DataSource, File, FileType, load
 
 start = time.perf_counter()
 
 
-def print_data_source_summary():
+def print_data_source_summary(engine: Engine):
     """Print a summary of the dataset data source.
 
     For each data source, print the number of datasets,
@@ -62,7 +62,7 @@ def print_data_source_summary():
         print(f"{'total':<15}{total_count:<20}{'None':<15}{'None':<15}\n")
 
 
-def query_to_dataframe():
+def query_to_dataframe(engine: Engine):
     """Convert a query result to a pandas DataFrame."""
     with Session(engine) as session:
         # Build a statement that selects Dataset records,
@@ -86,7 +86,7 @@ def query_to_dataframe():
         print(df.columns, "\n")
 
 
-def random_mdp_information():
+def random_mdp_information(engine: Engine):
     """Print information about a random .mdp file."""
     with Session(engine) as session:
         # When you perform a join on the same table more than once—in this case,
@@ -150,7 +150,7 @@ def random_mdp_information():
         print("-" * 40, "\n")
 
 
-def print_datasets_no_files():
+def print_datasets_no_files(engine: Engine):
     """Print datasets that have no files."""
     with Session(engine) as session:
         # Build a query that from joining Dataset and File tables:
@@ -181,13 +181,14 @@ def print_datasets_no_files():
 
 def main():
     """Run the queries and print the results."""
-    print_data_source_summary()
+    engine = load()
+    print_data_source_summary(engine)
     print("\n\n")
-    query_to_dataframe()
+    query_to_dataframe(engine)
     print("\n\n")
-    random_mdp_information()
+    random_mdp_information(engine)
     print("\n\n")
-    print_datasets_no_files()
+    print_datasets_no_files(engine)
     print("\n\n")
 
 
