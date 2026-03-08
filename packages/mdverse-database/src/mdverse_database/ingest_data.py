@@ -23,7 +23,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, delete, select
 from tqdm import tqdm
 
-from .db_schema import (
+from .database import (
     Author,
     Dataset,
     DataSource,
@@ -32,7 +32,7 @@ from .db_schema import (
     ParameterFile,
     TopologyFile,
     TrajectoryFile,
-    engine,
+    load,
 )
 
 # ============================================================================
@@ -1100,4 +1100,5 @@ def data_ingestion():
 
 
 if __name__ == "__main__":
+    engine = load()
     data_ingestion()
