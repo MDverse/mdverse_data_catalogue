@@ -5,9 +5,10 @@ description = "MDverse data catalogue"
 readme = "README.md"
 license = "BSD-3-Clause"
 authors = [
-    { name = "Pierre Poulain", email = "pierre.poulain@cupnet.net" },
+    { name = "Giulia Di Gennaro", email = "giuliadgm05@gmail.com" },
     { name = "Essmay Touami", email = "essmay.touami@etu.u-paris.fr" },
-    { name = "Salahudin Sheikh", email = "sheikh@ibpc.fr"}
+    { name = "Salahudin Sheikh", email = "sheikh@ibpc.fr"},
+    { name = "Pierre Poulain", email = "pierre.poulain@cupnet.net" }
 ]
 maintainers = [
     { name = "Pierre Poulain", email = "pierre.poulain@cupnet.net" }
@@ -24,6 +25,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Chemistry",
 ]
+
+[project.urls]
+Homepage = "https://mdverse.eu/"
+Repository = "https://github.com/mdverse/MDverse/mdverse_data_catalogue"
+Issues = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/issues"
+Changelog = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/CHANGELOG.md"
+
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.3.1",
