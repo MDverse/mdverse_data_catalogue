@@ -15,3 +15,4 @@ dependencies = [
 database-create = "mdverse_database.create_database:main"
 database_ingest = "mdverse_database.ingest_data:main"
 database-report = "mdverse_database.report:main"
+database-query = "mdverse_database.query:main"
