@@ -44,6 +44,7 @@ ignore = [
     "G004",   # f-strings are allowed with the loguru module. See https://docs.astral.sh/ruff/rules/logging-f-string/
     "PLR",    # No Pylint recommendations
     "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
+    "DTZ001", # `datetime.datetime()` called without a `tzinfo` argument
 ]
 
 # Force numpy-style for docstrings

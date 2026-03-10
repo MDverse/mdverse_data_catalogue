@@ -83,10 +83,10 @@ class FigshareAPI:
         # Handle SSL certificates.
         curl.setopt(curl.CAINFO, certifi.where())
         # Follow redirect.
-        curl.setopt(curl.FOLLOWLOCATION, True)
+        curl.setopt(curl.FOLLOWLOCATION, True)  # noqa: FBT003
         # If data is provided, set the request to POST and add the data.
         if data is not None:
-            curl.setopt(curl.POST, True)
+            curl.setopt(curl.POST, True)  # noqa: FBT003
             data_json = json.dumps(data)
             curl.setopt(curl.POSTFIELDS, data_json)
         # Capture the response body in a buffer.

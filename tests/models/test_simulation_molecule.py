@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from mdverse_models.enums import ExternalDatabaseName
-from mdverse_models.simulation import (
+from mdverse.models.enums import ExternalDatabaseName
+from mdverse.models.simulation import (
     ExternalIdentifier,
     Molecule,
 )

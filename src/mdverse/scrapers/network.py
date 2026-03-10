@@ -164,7 +164,6 @@ def make_http_request_with_retries(
                 raise httpx.HTTPStatusError(
                     msg, request=response.request, response=response
                 )
-            return response
         except httpx.TimeoutException:
             logger.warning(f"Attempt {attempt}/{max_attempts} timed out.")
             logger.warning(f"Timeout: {timeout} seconds.")
@@ -182,6 +181,8 @@ def make_http_request_with_retries(
             logger.debug(exc.request.headers)
             logger.debug("Response headers:")
             logger.debug(exc.response.headers)
+        else:
+            return response
         if attempt == max_attempts:
             logger.error(f"Maximum attempts ({max_attempts}) reached for URL:")
             logger.error(url)
