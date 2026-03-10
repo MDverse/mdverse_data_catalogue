@@ -1,6 +1,6 @@
 """Tests for the MDverse database module."""
 
-import mdverse_database.database as mdverse_db
+import mdverse.database.database as mdverse_db
 
 
 def test_create():

@@ -43,6 +43,10 @@ dependencies = [
     "certifi>=2026.1.4",
     "html5lib>=1.1",
     "pandas>=2.3.3",
+    "pyarrow>=23.0.0",
+    "tqdm>=4.67.3",
+    "sqlmodel>=0.0.37",
+    "fastparquet>=2025.12.0",
 ]
 
 [dependency-groups]
@@ -77,3 +81,8 @@ scrape-nomad = "mdverse.scrapers.nomad:main"
 scrape-atlas = "mdverse.scrapers.atlas:main"
 scrape-gpcrmd = "mdverse.scrapers.gpcrmd:main"
 scrape-mddb = "mdverse.scrapers.mddb:main"
+# Database
+database-create = "mdverse.database.create_database:main"
+database-ingest = "mdverse.database.ingest_data:main"
+database-report = "mdverse.database.report:main"
+database-query = "mdverse.database.query:main"
