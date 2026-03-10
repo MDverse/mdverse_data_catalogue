@@ -64,7 +64,7 @@ class ScraperContext(BaseModel):
         description="Access token or API key.",
     )
     start_time: datetime = Field(
-        default_factory=lambda: datetime.now(),
+        default_factory=datetime.now,
         description="Datetime when the scraper started.",
     )
     is_in_debug_mode: bool = Field(

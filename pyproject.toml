@@ -1,5 +1,5 @@
 [project]
-name = "mdverse-data-catalogue"
+name = "mdverse"
 version = "0.1.0"
 description = "MDverse data catalogue"
 readme = "README.md"
@@ -36,9 +36,13 @@ dependencies = [
     "pydantic>=2.12.4",
     "python-dotenv>=1.0.1",
     "pyyaml>=6.0.2",
-    "mdverse-scrapers",
-    "mdverse-models",
-    "mdverse-database",
+    "beautifulsoup4>=4.14.3",
+    "pycurl>=7.45.7",
+    "selenium>=4.40.0",
+    "httpx[http2]>=0.28.1",
+    "certifi>=2026.1.4",
+    "html5lib>=1.1",
+    "pandas>=2.3.3",
 ]
 
 [dependency-groups]
@@ -61,12 +65,15 @@ Repository = "https://github.com/mdverse/MDverse/mdverse_data_catalogue"
 Issues = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/issues"
 Changelog = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/CHANGELOG.md"
 
+[build-system]
+requires = ["uv_build>=0.9.22,<0.10.0"]
+build-backend = "uv_build"
 
-
-[tool.uv.sources]
-mdverse-models = { workspace = true }
-mdverse-scrapers = { workspace = true }
-mdverse-database = { workspace = true }
-
-[tool.uv.workspace]
-members = [ "packages/*" ]
+[project.scripts]
+# Scrapers
+scrape-zenodo = "mdverse.scrapers.zenodo:main"
+scrape-figshare = "mdverse.scrapers.figshare:main"
+scrape-nomad = "mdverse.scrapers.nomad:main"
+scrape-atlas = "mdverse.scrapers.atlas:main"
+scrape-gpcrmd = "mdverse.scrapers.gpcrmd:main"
+scrape-mddb = "mdverse.scrapers.mddb:main"

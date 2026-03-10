@@ -52,4 +52,4 @@ def get_cli_output_dir_query_file(output_dir_path: Path, query_file_path: Path):
     """
     # Create output directory if it does not exist.
     output_dir_path.mkdir(parents=True, exist_ok=True)
-    return output_dir_path, query_file
+    return output_dir_path, query_file_path

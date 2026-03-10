@@ -5,9 +5,9 @@ import json
 import httpx
 import pytest
 
-import mdverse_scrapers.core.network as network
-import mdverse_scrapers.core.toolbox as toolbox
-from mdverse_scrapers.core.logger import create_logger
+import mdverse.scrapers.network as network
+import mdverse.scrapers.toolbox as toolbox
+from mdverse.core.logger import create_logger
 
 
 @pytest.mark.network
