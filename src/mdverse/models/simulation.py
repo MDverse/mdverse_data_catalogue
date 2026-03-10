@@ -199,7 +199,7 @@ class SimulationMetadata(BaseModel):
         if value is None:
             return None
 
-        def check_positive(value: str | float | int):
+        def check_positive(value: str | float):
             # Case 1: value is already numeric.
             if isinstance(value, (int, float)):
                 if value <= 0:
@@ -211,10 +211,10 @@ class SimulationMetadata(BaseModel):
                 match = re.search(r"([-+]?\d*\.?\d+)", value)
                 if not match or float(match.group(1)) <= 0:
                     msg = f"Invalid simulation parameter: {value}"
-                    raise ValueError(msg)
+                    raise TypeError(msg)
             else:
                 msg = f"Unsupported type for simulation parameter: {type(value)}"
-                raise ValueError(msg)
+                raise TypeError(msg)
 
         # Iterate over the possible values
         if isinstance(value, list):

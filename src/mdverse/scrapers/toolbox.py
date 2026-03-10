@@ -13,9 +13,10 @@ import loguru
 import pandas as pd
 import yaml
 from bs4 import BeautifulSoup
-from mdverse_models.dataset import DatasetMetadata
-from mdverse_models.file import FileMetadata
-from mdverse_models.scraper import ScraperContext
+
+from mdverse.models.dataset import DatasetMetadata
+from mdverse.models.file import FileMetadata
+from mdverse.models.scraper import ScraperContext
 
 warnings.filterwarnings(
     "ignore",

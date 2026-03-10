@@ -8,19 +8,20 @@ from pathlib import Path
 import click
 import loguru
 from dotenv import load_dotenv
-from mdverse_models.enums import DatasetSourceName
-from mdverse_models.file import FileMetadata
-from mdverse_models.scraper import ScraperContext
-from mdverse_models.utils import (
+
+from mdverse.core.logger import create_logger
+from mdverse.models.enums import DatasetSourceName
+from mdverse.models.file import FileMetadata
+from mdverse.models.scraper import ScraperContext
+from mdverse.models.utils import (
     export_list_of_models_to_parquet,
     normalize_datasets_metadata,
     normalize_files_metadata,
 )
 
-from ..core.figshare_api import FigshareAPI
-from ..core.logger import create_logger
-from ..core.network import get_html_page_with_selenium
-from ..core.toolbox import (
+from .figshare_api import FigshareAPI
+from .network import get_html_page_with_selenium
+from .toolbox import (
     clean_text,
     find_remove_false_positive_datasets,
     make_http_get_request_with_retries,
