@@ -36,11 +36,6 @@ def extract_files_from_json_response(
 ) -> list[str]:
     """Walk recursively through the json directory tree structure.
 
-    Examples
-    --------
-    https://figshare.com/ndownloader/files/3788686/preview/3788686/structure.json
-    has 14 files in 2 levels of directories.
-
     Parameters
     ----------
     json_dic : dict
@@ -53,6 +48,11 @@ def extract_files_from_json_response(
     -------
     list
         List of filenames extracted from zip listing.
+
+    Examples
+    --------
+    https://figshare.com/ndownloader/files/3788686/preview/3788686/structure.json
+    has 14 files in 2 levels of directories.
     """
     if file_list is None:
         file_list = []
@@ -247,7 +247,13 @@ def extract_metadata_from_single_dataset_record(
             clean_text(author.get("full_name"))
             for author in record_json.get("authors", [])
         ],
-        "description": strip_html(record_json.get("description", "")),
+        # Remove far too many line breaks in description.
+        # See for instance:
+        # https://acs.figshare.com/articles/dataset/An_Active_Site_Inhibitor_Induces_Conformational_Penalties_for_ACE2_Recognition_by_the_Spike_Protein_of_SARS-CoV_2/14156828
+        # https://api.figshare.com/v2/articles/14156828
+        "description": (
+            strip_html(record_json.get("description", "")).replace("\n", " ").strip()
+        ),
         "license": record_json.get("license", {}).get("name"),
         "doi": record_json.get("doi"),
         "download_number": dataset_stats["download_number"],

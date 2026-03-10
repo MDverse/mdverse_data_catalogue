@@ -32,10 +32,10 @@ Currently, we are scraping the following data repositories:
 
 - Zenodo [docs](docs/zenodo.md)
 - Figshare [docs](docs/figshare.md)
-- ATLAS
-- NOMAD
-- GPCRmd
-- MDDB
+- ATLAS [docs](docs/atlas.md)
+- NOMAD [docs](docs/nomad.md)
+- GPCRmd [docs](docs/gpcrmd.md)
+- MDDB [docs](docs/mddb.md)
 
 Soon:
 

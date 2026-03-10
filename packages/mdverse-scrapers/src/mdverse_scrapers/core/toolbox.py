@@ -89,7 +89,6 @@ def make_http_get_request_with_retries(
                 raise httpx.HTTPStatusError(
                     msg, request=response.request, response=response
                 )
-            return response
         except httpx.TimeoutException:
             logger.warning(f"Attempt {attempt}/{max_attempts} timed out.")
             logger.warning(f"Timeout: {timeout} seconds.")
@@ -107,6 +106,8 @@ def make_http_get_request_with_retries(
             logger.debug(exc.request.headers)
             logger.debug("Response headers:")
             logger.debug(exc.response.headers)
+        else:
+            return response
         if attempt == max_attempts:
             logger.error(f"Maximum attempts ({max_attempts}) reached for URL:")
             logger.error(url)
@@ -221,7 +222,7 @@ def strip_html(input_text: str) -> str:
     str
         clean text
     """
-    return BeautifulSoup(input_text, features="lxml").text
+    return BeautifulSoup(input_text, features="lxml").text.strip()
 
 
 def strip_whitespace(input_text: str) -> str:
@@ -240,8 +241,7 @@ def strip_whitespace(input_text: str) -> str:
     # Remove tabulation and carriage return.
     text_clean = re.sub(r"[\n\r\t]", " ", input_text)
     # Remove multi spaces.
-    text_clean = re.sub(r" {2,}", " ", text_clean)
-    return text_clean
+    return re.sub(r" {2,}", " ", text_clean)
 
 
 def clean_text(input_text: str) -> str:
