@@ -83,6 +83,12 @@ You can run scrape all data repositories at once with:
 bash scripts/scrape_all.sh
 ```
 
+For debugging purpose, you can scrape a small subset of available data:
+
+```sh
+bash scripts/scrape_all_debug.sh
+```
+
 ## Analyze Gromacs mdp and gro files
 
 ### Download files
@@ -224,7 +230,7 @@ uv run database-create
 Populate the tables with the data from parquet files:
 
 ```sh
-uv run database_ingest
+uv run database-ingest
 ```
 
 ### Information on the database
