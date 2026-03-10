@@ -11,7 +11,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from mdverse.logger import create_logger
+from mdverse.core.logger import create_logger
 from mdverse.models.enums import DatasetSourceName
 from mdverse.models.file import FileMetadata
 from mdverse.models.scraper import ScraperContext

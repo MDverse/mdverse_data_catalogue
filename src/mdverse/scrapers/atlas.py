@@ -10,7 +10,7 @@ import httpx
 import loguru
 from bs4 import BeautifulSoup
 
-from mdverse.logger import create_logger
+from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
 from mdverse.models.scraper import ScraperContext

@@ -14,7 +14,7 @@ import httpx
 import loguru
 from bs4 import BeautifulSoup
 
-from mdverse.logger import create_logger
+from mdverse.core.logger import create_logger
 from mdverse.models.enums import DatasetSourceName
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.simulation import ForceFieldModel, Molecule, Software
