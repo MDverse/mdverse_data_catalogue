@@ -26,58 +26,32 @@ Create a virtual environment:
 uv sync
 ```
 
-## Scrape MD dataset repositories
+## Scrape MD data repositories
 
 Currently, we are scraping the following data repositories:
 
-- Zenodo [docs](docs/zenodo.md)
-- Figshare [docs](docs/figshare.md)
-- ATLAS [docs](docs/atlas.md)
-- NOMAD [docs](docs/nomad.md)
-- GPCRmd [docs](docs/gpcrmd.md)
-- MDDB [docs](docs/mddb.md)
+- [Zenodo](docs/zenodo.md)
+- [Figshare](docs/figshare.md)
+- [ATLAS](docs/atlas.md)
+- [NOMAD](docs/nomad.md)
+- [GPCRmd](docs/gpcrmd.md)
+- [MDDB](docs/mddb.md)
 
 Soon:
 
-- OSF [docs](docs/osf.md)
+- [OSF](docs/osf.md)
+- [NMRlipids](docs/nmrlipids.md)
 
 ### Scraping Zenodo, Figshare and OSF
 
-To scrape Zenodo, Figshare and OSF, you need a token. Because these data repositories are generic data repositiries,
+To scrape Zenodo, Figshare and OSF, you need a token. Because these data repositories are generic data repositories,
 you also need a query parameters (in `params/`).
 
 Note that "[false positives](docs/false_positives.md)" are removed during the scraping process.
 
-### Scrape NMRLipids Databank
+### Automation
 
-Scrape the NMRLipids Databank to extract metadata from molecular dynamics (MD) simulations.
-
-1. Clone the NMRLipids repository
-
-```bash
-git clone https://github.com/NMRLipids/BilayerData.git
-```
-
-> All metadata are stored in `README.yaml` files under the `Simulations` directory.
-
-1. Extract metadata from simulations
-
-```bash
-uv run scripts/scrape_nmrlipids.py \
-  --sim-folder /path/to/BilayerData/Simulations
-```
-
-This command will:
-
-1. Recursively search for all `README.yaml` files in the `Simulations` directory
-2. Parse and normalize MD simulation metadata
-3. Inject mandatory metadata fields (source, crawling_date, licence)
-4. Validate entries using Pydantic models
-5. Save the extracted metadata to Parquet files
-
-## Automation
-
-You can run scrape all data repositories at once with:
+You can scrape all data repositories at once with:
 
 ```sh
 bash scripts/scrape_all.sh
