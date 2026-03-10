@@ -109,3 +109,12 @@ Example dataset "[Molecular Dynamics Simulations](https://figshare.com/articles/
 - The content of the file "Molecular Dynamics Simulations.zip" is available at <https://figshare.com/ndownloader/files/58572346/preview/58572346/structure.json>
 
 We need to emulate a web browser to access the URLs linking to the contents of zip files. Otherwise, we get a 202 code.
+
+## Metadata processing
+
+Dataset descriptions sometimes have a lot of line breaks (`\n`) that are not shown in the web view. See for instance:
+
+- dataset 21726720: [web](https://figshare.com/articles/dataset/Perfluorinated_Alcohols_at_High_Pressure_Experimental_Liquid_Density_and_Computer_Simulations/21726720) - [API](https://api.figshare.com/v2/articles/21726720)
+- dataset 14156828: [web](https://acs.figshare.com/articles/dataset/An_Active_Site_Inhibitor_Induces_Conformational_Penalties_for_ACE2_Recognition_by_the_Spike_Protein_of_SARS-CoV_2/14156828) - [API](https://api.figshare.com/v2/articles/14156828)
+
+We removed all line breaks (`\n`) from the descriptions.
