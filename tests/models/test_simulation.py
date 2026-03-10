@@ -103,7 +103,7 @@ def test_invalid_fields():
 # --------------------------------------
 def test_invalid_simulation_value_type():
     """Test that non-numeric strings raise ValidationError."""
-    with pytest.raises(ValidationError):
+    with pytest.raises(TypeError):
         SimulationMetadata(
             simulation_timesteps_in_fs=["invalid-value"],  # because not a float
         )
