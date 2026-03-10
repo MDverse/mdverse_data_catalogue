@@ -1,6 +1,6 @@
 """Tests for the toolbox module."""
 
-from mdverse_scrapers.core.toolbox import (
+from mdverse.scrapers.toolbox import (
     convert_file_size_to_human_readable,
 )
 

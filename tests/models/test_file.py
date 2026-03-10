@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ByteSize
 
-from mdverse_models.enums import DatasetSourceName
-from mdverse_models.file import FileMetadata
+from mdverse.models.enums import DatasetSourceName
+from mdverse.models.file import FileMetadata
 
 
 def test_file_metadata_basic_creation():

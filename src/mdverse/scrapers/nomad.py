@@ -12,24 +12,25 @@ from typing import Any
 import click
 import httpx
 import loguru
-from mdverse_models.dataset import DatasetMetadata
-from mdverse_models.enums import DatasetSourceName
-from mdverse_models.scraper import ScraperContext
-from mdverse_models.simulation import Molecule, Software
-from mdverse_models.utils import (
+
+from mdverse.logger import create_logger
+from mdverse.models.dataset import DatasetMetadata
+from mdverse.models.enums import DatasetSourceName
+from mdverse.models.scraper import ScraperContext
+from mdverse.models.simulation import Molecule, Software
+from mdverse.models.utils import (
     export_list_of_models_to_parquet,
     normalize_datasets_metadata,
     normalize_files_metadata,
 )
 
-from ..core.logger import create_logger
-from ..core.network import (
+from .network import (
     HttpMethod,
     create_httpx_client,
     is_connection_to_server_working,
     make_http_request_with_retries,
 )
-from ..core.toolbox import print_statistics
+from .toolbox import print_statistics
 
 BASE_NOMAD_URL = "http://nomad-lab.eu/prod/v1/api/v1"
 JSON_PAYLOAD_NOMAD_REQUEST: dict[str, Any] = {

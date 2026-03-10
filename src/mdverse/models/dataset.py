@@ -213,7 +213,7 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
             Returns None if the value is an empty list or empty string;
             otherwise returns the original value.
         """
-        if value == [] or value == "":
+        if value == [] or not value:
             return None
         return value
 

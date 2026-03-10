@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from mdverse_models.enums import ExternalDatabaseName
-from mdverse_models.simulation import (
+from mdverse.models.enums import ExternalDatabaseName
+from mdverse.models.simulation import (
     ExternalIdentifier,
     ForceFieldModel,
     Molecule,
@@ -43,7 +43,7 @@ def test_positive_simulation_values(values, should_raise_exception):
     [
         (["300K", "300  K"], [300.0, 300.0]),
         (["27°C", "27 °C"], [300.15, 300.15]),
-        (["0c", "100 Celcius"], [273.15, 373.15]),
+        (["0c", "100 Celsius"], [273.15, 373.15]),
         (["-10C", "-10 °C", "-1.87"], [263.15, 263.15, 271.28]),
         (None, None),
     ],

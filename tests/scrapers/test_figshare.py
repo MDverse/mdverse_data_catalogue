@@ -2,7 +2,7 @@
 
 import pytest
 
-import mdverse_scrapers.scrapers.figshare as figshare_scraper
+import mdverse.scrapers.figshare as figshare_scraper
 
 
 @pytest.mark.network
