@@ -32,18 +32,18 @@ def main(input_file_path_list: list[Path], *, is_in_debug_mode: bool = False) ->
         print(f"Reading data from: {parquet_file_path}")
         tmp_df = pd.read_parquet(parquet_file_path)
         if "dataset" in parquet_file_path.stem:
+            print(f"Adding {len(tmp_df):,} datasets")
             datasets_df = pd.concat([datasets_df, tmp_df], ignore_index=True)
-            print("Datasets size:")
-            print(datasets_df.shape)
         elif "file" in parquet_file_path.stem:
+            print(f"Adding {len(tmp_df):,} files")
             files_df = pd.concat([files_df, tmp_df], ignore_index=True)
-            print("Files size:")
-            print(files_df.shape)
         else:
             print(
                 f"Unknown category (dataset or file) for {parquet_file_path}. Skipping."
             )
             continue
+    print(f"Total datasets: {len(datasets_df):,}")
+    print(f"Total files: {len(files_df):,}")
 
 
 if __name__ == "__main__":
