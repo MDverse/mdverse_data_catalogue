@@ -80,6 +80,7 @@ scrape-nomad = "mdverse.scrapers.nomad:main"
 scrape-atlas = "mdverse.scrapers.atlas:main"
 scrape-gpcrmd = "mdverse.scrapers.gpcrmd:main"
 scrape-mddb = "mdverse.scrapers.mddb:main"
+get-scrapers-stats = "mdverse.scrapers.stats:main"
 # Database
 database-create = "mdverse.database.create_database:main"
 database-ingest = "mdverse.database.ingest_data:main"
