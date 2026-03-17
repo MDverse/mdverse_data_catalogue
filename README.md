@@ -63,6 +63,18 @@ For debugging purpose, you can scrape a small subset of available data:
 bash scripts/scrape_all_debug.sh
 ```
 
+### Get statistics on scraped data
+
+```sh
+uv run get-scrapers-stats \
+    --dir data/zenodo/2026-02-16 \
+    --dir data/figshare/2026-03-10 \
+    --dir data/mddb/2026-02-18 \
+    --dir data/nomad/2026-02-18 \
+    --dir data/atlas/2026-02-18 \
+    --dir data/gpcrmd/2026-02-18
+```
+
 ## Analyze Gromacs mdp and gro files
 
 ### Download files

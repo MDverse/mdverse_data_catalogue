@@ -45,6 +45,7 @@ ignore = [
     "PLR",    # No Pylint recommendations
     "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
     "DTZ001", # `datetime.datetime()` called without a `tzinfo` argument
+    "RET504", # Unnecessary assignment to `datasets_agg` before `return` statement
 ]
 
 # Force numpy-style for docstrings
