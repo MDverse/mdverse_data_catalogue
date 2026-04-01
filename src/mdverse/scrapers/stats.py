@@ -6,6 +6,8 @@ import click
 import numpy as np
 import pandas as pd
 
+from mdverse.core.logger import create_logger
+
 
 def list_parquet_files(dir_list: list[Path] | list[str]) -> list[Path]:
     """List all Parquet files in the given directories.
@@ -113,6 +115,33 @@ def aggregate_files(files_df: pd.DataFrame) -> pd.DataFrame:
     return files_agg
 
 
+def merge_datasets_files_dataframes(
+    datasets_df: pd.DataFrame, files_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Merge datasets and files DataFrames on dataset_id_in_repository.
+
+    Parameters
+    ----------
+    datasets_df : pd.DataFrame
+        DataFrame containing dataset information.
+    files_df : pd.DataFrame
+        DataFrame containing file information.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged DataFrame containing both dataset and file information.
+    """
+    merged_df = datasets_df.merge(
+        files_df,
+        on=["dataset_repository_name"],
+        how="inner",
+        suffixes=("_from_datasets", "_from_files"),
+    )
+    merged_df.loc["total"] = merged_df.sum(numeric_only=True)
+    return merged_df
+
+
 @click.command(
     help="Get statistics for scrapers.",
 )
@@ -133,16 +162,39 @@ def aggregate_files(files_df: pd.DataFrame) -> pd.DataFrame:
 )
 def main(dir_list: list[Path], *, is_in_debug_mode: bool = False) -> None:
     """Get statistics for all Parquet files passed as arguments."""
+    # Create logger.
+    level = "DEBUG" if is_in_debug_mode else "INFO"
+    logger = create_logger(logpath="data/stats.log", level=level)
+    # List Parquet files.
     parquet_files = list_parquet_files(dir_list)
-    print(f"Found {len(parquet_files)} Parquet files")
+    logger.info(f"Found {len(parquet_files)} Parquet files")
     if len(parquet_files) == 0:
-        print("No Parquet files found. Exiting.")
+        logger.error("No Parquet files found. Exiting.")
         return
     datasets_df, files_df = read_datasets_files_dataframes(parquet_files)
-    print(f"Total datasets: {len(datasets_df):,}")
-    print(f"Total files: {len(files_df):,}")
-    # datasets_agg = aggregate_datasets(datasets_df)
-    # files_agg = aggregate_files(files_df)
+    logger.success(f"Total datasets: {len(datasets_df):,}")
+    logger.success(f"Total files: {len(files_df):,}")
+    logger.info("-" * 30)
+    # Create results folder.
+    result_dir = Path("data")
+    result_dir.mkdir(parents=True, exist_ok=True)
+    # Aggregate datasets.
+    datasets_agg_df = aggregate_datasets(datasets_df)
+    logger.info(f"\n{datasets_agg_df.to_string()}")
+    datasets_stats_path = result_dir / "datasets_stats.tsv"
+    datasets_agg_df.to_csv(datasets_stats_path, sep="\t")
+    logger.success(f"Wrote datasets stats to: {datasets_stats_path}")
+    # Aggregate files.
+    files_agg_df = aggregate_files(files_df)
+    logger.info(f"\n{files_agg_df.to_string()}")
+    files_stats_path = result_dir / "files_stats.tsv"
+    files_agg_df.to_csv(files_stats_path, sep="\t")
+    logger.success(f"Wrote files stats to: {files_stats_path}")
+    # Merge datasets and files dataframes.
+    merged_df = merge_datasets_files_dataframes(datasets_agg_df, files_agg_df)
+    merged_stats_path = result_dir / "merged_stats.tsv"
+    merged_df.to_csv(merged_stats_path, sep="\t")
+    logger.success(f"Wrote merged stats to: {merged_stats_path}")
 
 
 if __name__ == "__main__":
