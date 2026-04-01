@@ -181,18 +181,18 @@ def main(dir_list: list[Path], *, is_in_debug_mode: bool = False) -> None:
     # Aggregate datasets.
     datasets_agg_df = aggregate_datasets(datasets_df)
     logger.info(f"\n{datasets_agg_df.to_string()}")
-    datasets_stats_path = result_dir / "datasets_stats.tsv"
+    datasets_stats_path = result_dir / "stats_datasets.tsv"
     datasets_agg_df.to_csv(datasets_stats_path, sep="\t")
     logger.success(f"Wrote datasets stats to: {datasets_stats_path}")
     # Aggregate files.
     files_agg_df = aggregate_files(files_df)
     logger.info(f"\n{files_agg_df.to_string()}")
-    files_stats_path = result_dir / "files_stats.tsv"
+    files_stats_path = result_dir / "stats_files.tsv"
     files_agg_df.to_csv(files_stats_path, sep="\t")
     logger.success(f"Wrote files stats to: {files_stats_path}")
     # Merge datasets and files dataframes.
     merged_df = merge_datasets_files_dataframes(datasets_agg_df, files_agg_df)
-    merged_stats_path = result_dir / "merged_stats.tsv"
+    merged_stats_path = result_dir / "stats_merged.tsv"
     merged_df.to_csv(merged_stats_path, sep="\t")
     logger.success(f"Wrote merged stats to: {merged_stats_path}")
 
