@@ -1,0 +1,95 @@
+keywords:
+- molecular dynamics
+- molecular dynamic
+- molecular-dynamics
+- molecular-dynamic
+- md trajectory
+- md trajectories
+- md simulation
+- md simulations
+- gromacs
+- gromos
+- namd
+- amber
+- desmond
+- amber96
+- amber99
+- amber14
+- charmm
+- charmm27
+- charmm36
+- martini
+
+file_types:
+# GROMACS
+- type: tpr
+  keywords: none
+- type: gro
+  keywords: none
+- type: mdp
+  keywords: keywords
+- type: itp
+  keywords: keywords
+- type: ndx
+  keywords: none
+- type: xtc
+  keywords: none
+- type: trr
+  keywords: none
+- type: edr
+  keywords: none
+- type: cpt
+  keywords: none
+# NAMD / CHARMM
+- type: psf
+  keywords: keywords
+- type: inp
+  keywords: keywords
+- type: prm
+  keywords: keywords
+- type: crd
+  keywords: none
+- type: namd
+  keywords: none
+- type: dcd
+  keywords: keywords
+- type: coor
+  keywords: keywords
+- type: vel
+  keywords: keywords
+- type: xsc
+  keywords: keywords
+# AMBER
+- type: prmtop
+  keywords: none
+- type: rst7
+  keywords: none
+- type: leap
+  keywords: none
+- type: parm7
+  keywords: keywords
+- type: frcmod
+  keywords: keywords
+- type: inpcrd
+  keywords: keywords
+- type: mdcrd
+  keywords: keywords
+- type: ncdf
+  keywords: keywords
+- type: trj
+  keywords: keywords
+# DESMOND
+- type: cms
+  keywords: keywords
+- type: dtr
+  keywords: keywords
+# ZIP FILES
+- type: zip
+  keywords: keywords
+
+excluded_files_starting_with:
+- "."
+
+excluded_paths_containing:
+- "__MACOSX"
+- ".git"

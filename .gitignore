@@ -1,0 +1,64 @@
+# Result files
+*.tsv
+*.parquet
+*.db
+data/*
+!data/.gitkeep
+logs/*
+*.log
+
+# Result figures
+notebooks/*.png
+notebooks/*.svg
+results/
+
+# dev / tmp files
+dev*
+tmp*
+
+# http files for debug
+*.http
+
+# credential file
+.env
+
+# Byte-compiled Python files
+__pycache__/
+*.egg-info
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints
+
+# MAC tmp files
+.DS_Store
+
+# SQLite database files
+*.db
+*.db-journal
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+
+# PyPI configuration file
+.pypirc
+
+# ruff
+.ruff_cache/
