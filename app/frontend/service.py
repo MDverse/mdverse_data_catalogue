@@ -96,10 +96,10 @@ def get_dataset_origin_summary() -> tuple[list[any], dict[str, str]]:
             row.number_of_datasets for row in datasets_stats_results
             )),
             "first_dataset": min(
-            row.first_dataset for row in datasets_stats_results
+            row.first_dataset for row in datasets_stats_results if row.first_dataset
             ) if any(row.first_dataset for row in datasets_stats_results) else None,
             "last_dataset": max(
-            row.last_dataset for row in datasets_stats_results
+            row.last_dataset for row in datasets_stats_results if row.last_dataset
             ) if any(row.last_dataset for row in datasets_stats_results) else None,
             "non_zip_files": "{:,}".format(sum(
             row.non_zip_files for row in datasets_stats_results
