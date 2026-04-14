@@ -26,6 +26,12 @@ Create a virtual environment:
 uv sync
 ```
 
+> **Note:** This project requires PyArrow >= 23.0.1. If you encounter errors
+> related to parquet files, upgrade PyArrow by running:
+> ```sh
+> uv add --upgrade pyarrow
+> ```
+
 ## Scrape MD data repositories
 
 Currently, we are scraping the following data repositories:
@@ -185,49 +191,53 @@ uv run scripts/upload_datasets_to_zenodo.py --record 7856524 \
 
 ## Build database
 
-### Retrieve data
 
-Download parquet files from [Zenodo](https://doi.org/10.5281/zenodo.7856523) to build the database:
-
-```sh
-uv run src/download_data.py
-```
-
-Files will be downloaded to `data/parquet_files`:
-
-```none
-data
-└── parquet_files
-    ├── datasets.parquet
-    ├── files.parquet
-    ├── gromacs_gro_files.parquet
-    ├── gromacs_mdp_files.parquet
-    ├── gromacs_xtc_files.parquet
-```
-
-### Build the database
-
-Create the empty database:
+### Create the empty database
 
 ```sh
 uv run database-create
 ```
 
-Populate the tables with the data from parquet files:
+###  Ingest datasets (all sources)
+
+Run the datasets parquet for each source first. This populates the `datasets`,
+`authors`, and `data_sources` tables.
 
 ```sh
-uv run database-ingest
+uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_datasets.parquet
+# same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
 ```
 
-### Information on the database
+###  Ingest files (all sources)
 
-Report on the number of rows and columns of the table of the database:
+Once all datasets are ingested, run the files parquet for each source.
+This populates the `files` and `file_types` tables.
+
+```sh
+uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_files.parquet
+# same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
+```
+
+###  Verify the database
 
 ```sh
 uv run database-report
 ```
 
-This will create the file `report.log` with all information.
+This will print a summary to the terminal and create a `report.log` file.
+
+### Ingesting a single source
+
+The ingestion script is generic — you can ingest any single parquet file
+at any time by passing its path as an argument:
+
+```sh
+uv run src/ingest_data.py /path/to/source_datasets.parquet
+uv run src/ingest_data.py /path/to/source_files.parquet
+```
+
+The script automatically detects whether the file is a datasets or files
+parquet based on the filename (`_datasets` or `_files`).
 
 ### Re-ingesting simulation data
 
@@ -253,4 +263,3 @@ or
 
 ```sh
 uv run src/ingest_traj_files.py
-```
