@@ -1,11 +1,15 @@
 # Result files
 *.tsv
 *.parquet
-*.db
+*.dbs
 data/*
 !data/.gitkeep
 logs/*
 *.log
+
+# SQLite database files
+*.db
+*.db-journal
 
 # Result figures
 notebooks/*.png
