@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block main %}
+<section class="section">
+    <h1>File types</h1>
+    <table id="file_types_tables" class="table is-striped is-hoverable" style="width:100%">
+        <thead>
+            <tr>
+                <th>File type</th>
+                <th>Number of files</th>
+                <th>Number of datasets</th>
+                <th class="dt-right">Total size in GB</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {% for row in file_type_stats_summary|sort(attribute='number_of_files', reverse=True) %}
+            <tr hx-trigger="click" hx-get="/file_types/{{ row.file_type }}/download_info" hx-swap="innerHTML" hx-target="#file_types_download_info">
+                <td>{{ row.file_type }}</td>
+                <td>{{ "{:,}".format(row.number_of_files) }}</td>
+                <td>{{ "{:,}".format(row.number_of_datasets) }}</td>
+                <td class="dt-right">{{ "{:,.0f}".format(row.total_size_in_GB) if row.total_size_in_GB is not none else 'nan' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Add button to download list of files for a given file type -->
+    <div id="file_types_download_info">
+    </div>
+</section>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+    $(document).ready(function () {
+        $('#file_types_tables').DataTable({
+            "order": [[1, 'desc']],
+            autoWidth: false,
+            // Disable the highlight/bold style on the sorted column
+            orderClasses: false,
+        });
+    });
+</script>
+{% endblock %}

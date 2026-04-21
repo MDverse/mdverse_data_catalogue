@@ -1,0 +1,75 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/static/favicon.png" type="image/x-icon">
+  <title>{% block title %}MDverse data catalogue{% endblock %}</title>
+  <meta name="description" content="MDverse is a data catalogue that indexes and annotates molecular dynamics (MD) simulations.">
+  <meta name="keywords" content="molecular dynamics, simulation, MD, data catalogue, Zenodo, Figshare, OSF">
+  <meta name="author" content="Pierre Pierre, Matthieu Chavent">
+  <!-- Bulma CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
+  <!-- JQuery -->
+  <!-- Load before DataTables --> 
+  <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+  <!-- DataTables CSS + JS -->
+  <!-- https://datatables.net/download/ -->
+  <link href="https://cdn.datatables.net/v/dt/dt-2.2.2/date-1.5.5/sb-1.8.2/datatables.min.css" rel="stylesheet" integrity="sha384-I4/lBH5Ccr4H+zWkgZKgw+25BTqhOtQ19dxtlM831GM+YFw3OTWq2i12hoyfbfG7" crossorigin="anonymous">
+  <script src="https://cdn.datatables.net/v/dt/dt-2.2.2/date-1.5.5/sb-1.8.2/datatables.min.js" integrity="sha384-tIv+/jMSAROhLvH+FmDUrriZf12whWUskuKSHrpD9poD1Wn5pzQM8PPBeB9qtgtM" crossorigin="anonymous"></script>
+  <!-- DataTables Ellipsis -->
+  <script src="https://cdn.datatables.net/plug-ins/2.2.2/dataRender/ellipsis.js"></script>
+  <!-- HTMX -->
+  <!-- https://htmx.org/ -->
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+  <!-- Local custom CSS -->
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head_extra %}{% endblock %}
+</head>
+
+<body>
+  <header>
+    <nav class="navbar is-black" role="navigation" aria-label="main navigation">
+      <div class="navbar-brand is-size-3 has-text-weight-bold">
+        <a class="navbar-item" href="/">
+          MDverse
+        </a>
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbar-main">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </a>
+      </div>
+      <div id="navbar-main" class="navbar-menu">
+        <div class="navbar-start">
+          <a class="navbar-item" href="/datasets">Datasets</a>
+          <div class="navbar-item has-dropdown is-hoverable">
+            <a class="navbar-link">Files</a>
+            <div class="navbar-dropdown is-right">
+              <a class="navbar-item" href="/file_types">All types</a>
+              <a class="navbar-item" href="/file_types/gro">GRO files</a>
+              <a class="navbar-item" href="/file_types/mdp">MDP files</a>
+            </div>   
+          </div>
+        </div>
+      </div>
+      <div class="navbar-end">
+        <a class="navbar-item" href="/about">About</a> 
+      </div>
+    </nav>
+  </header>
+  <main class="content container">
+    {% block main %}{% endblock %}
+  </main>
+  <footer class="footer has-text-centered mt-auto">
+    <strong>MDverse</strong> 2025.
+  </footer>
+
+{% block script_extra %}
+{% endblock %}
+</body>
+
+</html>

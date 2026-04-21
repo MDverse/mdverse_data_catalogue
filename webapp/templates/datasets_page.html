@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block head_extra %}
+<!-- Ellipsis -->
+<style>
+    .ellipsis {
+        max-width: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>
+{% endblock %}
+
+{% block main %}
+<section class="section">
+    <h1>Datasets</h1>
+
+    <table id="datasets_table" class="table is-striped is-hoverable is-size-8" style="width:100%;">
+        <thead>
+            <tr>
+                <th class="is-vcentered">see more</th>
+                <th class="is-vcentered">source</th>
+                <th class="is-vcentered">source id</th>
+                <th class="is-vcentered">title</th>
+                <th class="is-vcentered">created</th>
+                <th class="is-vcentered">last modified</th>
+                <th class="is-vcentered">files</th>
+                <th class="is-vcentered">downloads</th>
+                <th class="is-vcentered">views</th>
+                <th class="is-vcentered">description</th>
+                <th class="is-vcentered">author(s)</th>
+            </tr>
+        </thead>
+    </table>
+    <!-- Dataset details when we click on a row from the dataset table -->
+    <div id="dataset_details">
+    </div>
+</section>
+{% endblock %}
+
+
+{% block script_extra %}
+<script type="text/javascript">
+    $('#datasets_table').DataTable({
+        ajax: '/datasets/datatables',
+        processing: true,
+        serverSide: true,
+        columns: [
+            { // view details
+                data: 'dataset_id',
+                render: function(data, type, row) {
+                    // data: the entire row data
+                    return '<button class="button is-small" hx-trigger="click" hx-get="/datasets/'+ data + '" hx-swap="innerHTML" hx-target="#dataset_details">🔍</button>';
+                }
+            },
+            { // origin
+                data: 'dataset_origin'
+            },
+            { // id in origin
+                data: 'id_in_data_source',
+                render: function(data, type, row) {
+                    // data: dataset_id_in_origin
+                    // row: the entire row data, including dataset_url
+                    return '<a href="' + row.url + '" target="_blank">' + data + '</a>';
+                }
+            },
+            { // title
+                data: 'title',
+                render: $.fn.dataTable.render.ellipsis(28),
+            },
+            { // date created
+                 data: 'date_created'
+            },
+            { // date last modified
+                data: 'date_last_modified'
+            },
+            { // number of files
+                data: 'file_number'
+            },
+            { // number of downloads
+                data: 'download_number'
+            },
+            { // number of views
+                data: 'view_number'
+            },
+            { // description
+                data: 'description',
+                render: $.fn.dataTable.render.ellipsis(20),
+            },
+            { // author(s)
+                data: 'author',
+                render: $.fn.dataTable.render.ellipsis(12),
+            },
+        ],
+        orderClasses: false,
+        autoWidth: false,
+        scrollX: true,
+        columnDefs: [
+            { width:  '5%', targets:  0, orderable: false },  // details button
+            { width:  '6%', targets:  1 },  // dataset origin
+            { width:  '6%', targets:  2 },  // dataset id in origin
+            { width: '28%', targets:  3 },  // title
+            { width: '10%', targets:  4 },  // date created
+            { width: '10%', targets:  5 },  // date last modified
+            { width:  '1%', targets:  6 },  // number of files
+            { width:  '1%', targets:  7 },  // number of downloads
+            { width:  '1%', targets:  8 },  // number of views
+            { width: '20%', targets:  9 },  // description
+            { width: '12%', targets:  10 },  // authors
+            { className: 'dt-center', targets: "_all" },  // center align all columns
+        ],
+        // https://datatables.net/reference/option/drawCallback
+        "drawCallback": function(settings) {
+            htmx.process('#datasets_table');
+        },
+    });
+</script>
+{% endblock %}

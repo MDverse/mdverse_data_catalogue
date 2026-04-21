@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block head_extra %}
+<!-- Bokeh CSS + JS -->
+<link rel="stylesheet" href="https://cdn.bokeh.org/bokeh/release/bokeh-2.4.3.min.css" type="text/css">
+<script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-3.6.3.min.js"></script>
+{% endblock %}
+
+{% block main %}
+<section class="section pt-0">
+    <section id="hero-welcome" class="hero is-medium py-6">
+        <div class="hero-body has-text-centered">
+            <p class="title is-size-1">Welcome to MDverse!</p>
+            <p class="subtitle has-text-weight-semibold">The data catalogue of molecular dynamics simulations.</p>
+        </div>
+    </section>
+
+    <div class="content pt-4" style="overflow-wrap: break-word;">
+        <p>
+            MDverse is a data catalogue that indexes and annotates molecular dynamics (MD) simulations. See <a href="/about">about</a> for more informations.
+        </p>
+    </div>
+    <nav class="level py-4 has-background-white-bis">
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="subtitle">Datasets</p>
+                <p class="title">{{ total_count.number_of_datasets }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="subtitle">Files</p>
+                <p class="title">{{ total_count.total_files }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="subtitle">Structures</p>
+                <p class="title">{{ banner_stats.total_topology_files }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="subtitle">Trajectories</p>
+                <p class="title">{{ banner_stats.total_trajectory_files }}</p>
+            </div>
+        </div>
+        <div class="level-item has-text-centered">
+            <div>
+                <p class="subtitle">Data sources</p>
+                <p class="title">{{ banner_stats.total_data_sources }}</p>
+            </div>
+        </div>
+    </nav>
+
+    <div class="card">
+        <div class="card-content">
+            <div class="content">
+                <table id="SummaryTable" class="table is-striped is-hoverable is-size-8">
+                    <thead>
+                        <tr>
+                            <th>Dataset origin</th>
+                            <th>Number of datasets</th>
+                            <th>First dataset</th>
+                            <th>Last dataset</th>
+                            <th>Non-zip files</th>
+                            <th>Zip files</th>
+                            <th>Files in zip files</th>
+                            <th>Total files</th>
+                            <th><abbr title="Total size in GB for non-zip and zip files">Size (GB)</abbr></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in results %}
+                        <tr>
+                            <td>{{ row.dataset_origin }}</td>
+                            <td>{{ "{:,}".format(row.number_of_datasets) }}</td>
+                            <td>{{ row.first_dataset }}</td>
+                            <td>{{ row.last_dataset }}</td>
+                            <td>{{ "{:,}".format(row.non_zip_files) }}</td>
+                            <td>{{ "{:,}".format(row.zip_files) }}</td>
+                            <td>{{ "{:,}".format(row.files_within_zip_files) }}</td>
+                            <td>{{ "{:,}".format(row.total_files) }}</td>
+                            <td>{{ "{:,.0f}".format(row.total_size_in_GB_non_zip_and_zip_files) }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                        <td><strong>Total</strong></td>
+                        {% for key, value in total_count.items() %}
+                        <td><strong>{{ value|e }}</strong></td>
+                        {% endfor %}
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-content">
+            <div class="content">
+                <div style="text-align: center;">
+                    <button id="filesBtn" class="toggle-btn active">Number of files per year</button>
+                    <button id="datasetsBtn" class="toggle-btn">Number of datasets per year</button>
+                </div>
+
+                <!-- Plot container using Flexbox to center child elements -->
+                <div class="plot-section" style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
+                    <!-- By default, show the files plot -->
+                    <div id="filesPlot" style="width: 1000px;">
+                        {{ files_plot_div | safe }}
+                    </div>
+                    <!-- The datasets plot is hidden by default -->
+                    <div id="datasetsPlot" style="width: 1000px; display: none;">
+                        {{ datasets_plot_div | safe }}
+                    </div>
+                </div>
+            
+                <!-- Bokeh scripts (both plots' scripts) -->
+                {{ files_plot_script | safe }}
+                {{ datasets_plot_script | safe }}
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-image">
+            <figure class="image">
+                <img src="/static/wordcloud.png" alt="Wordcloud of words datasets" width="100%"/>
+            </figure>
+        </div>
+    </div>
+
+    <!-- <section class="section is-spaced has-background-white-ter">
+        <h3 class="title is-3 has-text-centered">Developments</h3>
+        <div class="grid has-2-cols has-text-centered py-4 is-primary">
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+            <div class="cell">Cell 1</div>
+        </div>
+    </section> -->
+    
+</section>
+{% endblock %}
+
+{% block script_extra %}
+    <!-- JavaScript to toggle the plots -->
+    <script>
+        $(document).ready(function() {
+            $("#filesBtn").click(function(){
+                $(this).addClass("active");
+                $("#datasetsBtn").removeClass("active");
+                $("#filesPlot").show();
+                $("#datasetsPlot").hide();
+            });
+            $("#datasetsBtn").click(function(){
+                $(this).addClass("active");
+                $("#filesBtn").removeClass("active");
+                $("#datasetsPlot").show();
+                $("#filesPlot").hide();
+            });
+        });
+    </script>
+
+    <!-- Script that initializes DataTables -->
+    <script type="text/javascript">
+        $(document).ready(function() {
+            $('#SummaryTable').DataTable({
+            "paging": false,
+            "searching": false,
+            "info": false,
+            autoWidth: false,
+            responsive: true,
+            columnDefs: [{ orderable: false, targets: [0,1,2,3,4,5,6,7,8], className: 'dt-center', targets: '_all', }],
+            // Disable the highlight/bold style on the sorted column
+            orderClasses: false,
+            ordering: false,
+            });
+        });
+    </script>
+{% endblock %}

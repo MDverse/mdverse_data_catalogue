@@ -1,0 +1,28 @@
+<table id="all_files_table" class="table is-striped is-hoverable" style="width:100%; table-layout: fixed;">
+<thead>
+    <tr>
+        <th>name</th>
+        <th>type</th>
+        <th class="has-text-left">size (B)</th>
+        <th>url</th>
+        <th>Is from zip file?</th>
+    </tr>
+</thead>
+<tbody>
+    {% for file in all_files %}
+    <tr>
+        <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">{{ file.name }}</td>
+        <td>{{ file.file_type.name }}</td>
+        <td class="has-text-left">{{ "{:,.0f}".format(file.size_in_bytes) }}</td>
+        <td><a href="{{ file.url }}" target="_blank">🌐</a></td>
+        <td>{{ file.is_from_zip_file }}</td>
+    </tr>
+    {% endfor %}
+</tbody>
+</table>
+
+{% block script_extra %}
+<script>
+    $('#all_files_table').DataTable({});
+</script>
+{% endblock %}

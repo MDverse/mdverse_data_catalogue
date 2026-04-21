@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block main %}
+<section class="section">
+    {% include "dataset_info.html" %}
+
+    <hr class="bd-hr">
+
+    <div class="buttons has-addons is-fullwidth">
+        <button class="button" hx-get="/datasets/{{ dataset.dataset_id }}/files/all"
+            hx-trigger="click" hx-target="#files_list" hx-swap="innerHTML">
+            All files ({{total_files.total_all_files}})
+        </button>
+        <button class="button" hx-get="/datasets/{{ dataset.dataset_id }}/files/gro"
+            hx-trigger="click" hx-target="#files_list" hx-swap="innerHTML">
+            Analysed gro files ({{analysed_files.analysed_topology_files}}/{{total_files.total_topology_files}})
+        </button>
+        <button class="button" hx-get="/datasets/{{ dataset.dataset_id }}/files/mdp"
+            hx-trigger="click" hx-target="#files_list">
+            Analysed mdp files ({{analysed_files.analysed_parameter_files}}/{{total_files.total_parameter_files}})
+        </button>
+        <button class="button" hx-get="/datasets/{{ dataset.dataset_id }}/files/xtc"
+            hx-trigger="click" hx-target="#files_list">
+            Analysed xtc files ({{analysed_files.analysed_trajectory_files}}/{{total_files.total_trajectory_files}})
+        </button>
+    </div>
+
+    <div id="files_list">
+    </div>
+</section>
+{% endblock %}
