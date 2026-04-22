@@ -1,4 +1,7 @@
+from datetime import datetime
+
 from bokeh.models import ColumnDataSource, NumeralTickFormatter
+from bokeh.palettes import d3
 from bokeh.plotting import figure
 from mdverse.database.database import (
     Dataset,
@@ -140,7 +143,7 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
 
 
 def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
-    stmt = (
+    statement = (
         select(
             extract("year", Dataset.date_created).label("year"),
             func.count(Dataset.dataset_id).label("count"),
@@ -151,31 +154,29 @@ def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
         .group_by("year")
         .order_by("year")
     )
-    results = session.exec(stmt).all()
+    results = session.exec(statement).all()
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
-def create_files_plot(session: Session):
-    zenodo_data = get_files_yearly_counts_for_origin(session, "zenodo")
-    osf_data = get_files_yearly_counts_for_origin(session, "osf")
-    figshare_data = get_files_yearly_counts_for_origin(session, "figshare")
+def extract_data_repository_names(session: Session):
+    statement = select(DataSource.name).distinct()
+    return session.exec(statement).all()
 
-    all_years = sorted(
-        set(zenodo_data.keys()) | set(osf_data.keys()) | set(figshare_data.keys())
-    )
+
+def create_files_plot(session: Session):
+    repository_names = extract_data_repository_names(session)
+    all_years = list(range(2012, datetime.now().year + 1))
 
     data = {
-        "year": [str(y) for y in all_years],
-        "Zenodo": [zenodo_data.get(y, 0) for y in all_years],
-        "OSF": [osf_data.get(y, 0) for y in all_years],
-        "Figshare": [figshare_data.get(y, 0) for y in all_years],
+        "year": [str(year) for year in all_years],
     }
+    for repository in repository_names:
+        stats = get_files_yearly_counts_for_origin(session, repository)
+        data[repository] = [stats.get(year, 0) for year in all_years]
 
     source = ColumnDataSource(data=data)
-    repositories = ["Zenodo", "OSF", "Figshare"]
-    colors = ["#66c2a5", "#fc8d62", "#8da0cb"]
 
-    p = figure(
+    plot = figure(
         x_range=data["year"],
         height=600,
         width=1000,
@@ -188,37 +189,37 @@ def create_files_plot(session: Session):
         background_fill_color="#fafafa",
     )
 
-    p.toolbar.active_drag = None
+    plot.toolbar.active_drag = None
 
-    p.vbar_stack(
-        stackers=repositories,
+    plot.vbar_stack(
+        stackers=repository_names,
         x="year",
         width=0.8,
         source=source,
-        color=colors,
-        legend_label=repositories,
+        color=d3["Category20"][len(repository_names)],
+        legend_label=repository_names,
     )
-    p.xaxis.axis_label = "Year"
-    p.yaxis.axis_label = "Number of files"
-    p.yaxis.formatter = NumeralTickFormatter(format="0,0")
+    plot.xaxis.axis_label = "Year"
+    plot.yaxis.axis_label = "Number of files"
+    plot.yaxis.formatter = NumeralTickFormatter(format="0,0")
 
-    p.title.text_font_size = "14pt"
-    p.xaxis.axis_label_text_font_size = "12pt"
-    p.yaxis.axis_label_text_font_size = "12pt"
-    p.xaxis.major_label_text_font_size = "10pt"
-    p.yaxis.major_label_text_font_size = "10pt"
+    plot.title.text_font_size = "14pt"
+    plot.xaxis.axis_label_text_font_size = "12pt"
+    plot.yaxis.axis_label_text_font_size = "12pt"
+    plot.xaxis.major_label_text_font_size = "10pt"
+    plot.yaxis.major_label_text_font_size = "10pt"
 
-    p.legend.location = "top_left"
-    p.legend.background_fill_alpha = 0.3
-    p.legend.border_line_color = None
-    p.legend.label_text_font_size = "10pt"
+    plot.legend.location = "top_left"
+    plot.legend.background_fill_alpha = 0.3
+    plot.legend.border_line_color = None
+    plot.legend.label_text_font_size = "10pt"
 
-    return p
+    return plot
 
 
 # Similarly, create a plot for datasets per year.
 def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
-    stmt = (
+    statement = (
         select(
             extract("year", Dataset.date_created).label("year"),
             func.count(Dataset.dataset_id).label("count"),
@@ -228,31 +229,24 @@ def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
         .group_by("year")
         .order_by("year")
     )
-    results = session.exec(stmt).all()
+    results = session.exec(statement).all()
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
 def create_datasets_plot(session: Session):
-    zenodo_data = get_dataset_yearly_counts_for_origin(session, "zenodo")
-    osf_data = get_dataset_yearly_counts_for_origin(session, "osf")
-    figshare_data = get_dataset_yearly_counts_for_origin(session, "figshare")
-
-    all_years = sorted(
-        set(zenodo_data.keys()) | set(osf_data.keys()) | set(figshare_data.keys())
-    )
+    repository_names = extract_data_repository_names(session)
+    all_years = list(range(2012, datetime.now().year + 1))
 
     data = {
-        "year": [str(y) for y in all_years],
-        "Zenodo": [zenodo_data.get(y, 0) for y in all_years],
-        "OSF": [osf_data.get(y, 0) for y in all_years],
-        "Figshare": [figshare_data.get(y, 0) for y in all_years],
+        "year": [str(year) for year in all_years],
     }
+    for repository in repository_names:
+        stats = get_dataset_yearly_counts_for_origin(session, repository)
+        data[repository] = [stats.get(year, 0) for year in all_years]
 
     source = ColumnDataSource(data=data)
-    repositories = ["Zenodo", "OSF", "Figshare"]
-    colors = ["#66c2a5", "#fc8d62", "#8da0cb"]
 
-    p = figure(
+    plot = figure(
         x_range=data["year"],
         height=600,
         width=1000,
@@ -265,28 +259,29 @@ def create_datasets_plot(session: Session):
         background_fill_color="#fafafa",
     )
 
-    p.toolbar.active_drag = None
+    plot.toolbar.active_drag = None
 
-    p.vbar_stack(
-        stackers=repositories,
+    plot.vbar_stack(
+        stackers=repository_names,
         x="year",
         width=0.8,
         source=source,
-        color=colors,
-        legend_label=repositories,
+        color=d3["Category20"][len(repository_names)],
+        legend_label=repository_names,
     )
-    p.xaxis.axis_label = "Year"
-    p.yaxis.axis_label = "Number of datasets"
+    plot.xaxis.axis_label = "Year"
+    plot.yaxis.axis_label = "Number of datasets"
+    plot.yaxis.formatter = NumeralTickFormatter(format="0,0")
 
-    p.title.text_font_size = "14pt"
-    p.xaxis.axis_label_text_font_size = "12pt"
-    p.yaxis.axis_label_text_font_size = "12pt"
-    p.xaxis.major_label_text_font_size = "10pt"
-    p.yaxis.major_label_text_font_size = "10pt"
+    plot.title.text_font_size = "14pt"
+    plot.xaxis.axis_label_text_font_size = "12pt"
+    plot.yaxis.axis_label_text_font_size = "12pt"
+    plot.xaxis.major_label_text_font_size = "10pt"
+    plot.yaxis.major_label_text_font_size = "10pt"
 
-    p.legend.location = "top_left"
-    p.legend.background_fill_alpha = 0.3
-    p.legend.border_line_color = None
-    p.legend.label_text_font_size = "10pt"
+    plot.legend.location = "top_left"
+    plot.legend.background_fill_alpha = 0.3
+    plot.legend.border_line_color = None
+    plot.legend.label_text_font_size = "10pt"
 
-    return p
+    return plot
