@@ -47,18 +47,6 @@ repos:
       - id: ruff-format
         types: [python]
 
-  - repo: https://github.com/crate-ci/typos
-    #  Source code spell checker
-    rev: v1.45.1
-    hooks:
-      - id: typos
-
-  # - repo: https://github.com/owenlamont/uv-secure
-  #   # Scan your uv.lock file for dependencies with known vulnerabilities
-  #   rev: 0.17.0
-  #   hooks:
-  #     - id: uv-secure
-
   # YAML
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
