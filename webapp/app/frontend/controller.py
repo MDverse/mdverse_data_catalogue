@@ -37,7 +37,6 @@ async def read_index(request: Request, session: SessionDep):
         request=request,
         name="index_page.html",
         context={
-            "request": request,
             "results": datasets_stats_results,
             "total_count": datasets_stats_total_count,
             "banner_stats": home_page_banner_stats,
