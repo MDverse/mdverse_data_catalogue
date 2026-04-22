@@ -36,15 +36,16 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
             func.max(Dataset.date_created).label("last_dataset"),
             # Count files that are not zip files, also is_from_zip_file == False
             func.count(func.distinct(File.file_id))
-            .filter((not File.is_from_zip_file), (FileType.name != "zip"))
+            .filter((File.is_from_zip_file == False), (FileType.name != "zip"))  # noqa: E712
             .label("non_zip_files"),
             # Sum size of files that has is_from_zip_file == False
             (
-                func.sum(File.size_in_bytes).filter(not File.is_from_zip_file) / 1e9
+                func.sum(File.size_in_bytes).filter(File.is_from_zip_file == False)  # noqa: E712
+                / 1e9
             ).label("total_size_in_GB_non_zip_and_zip_files"),
             # Count parent zip files (FileType.name == 'zip')
             func.count(func.distinct(File.file_id))
-            .filter((not File.is_from_zip_file) & (FileType.name == "zip"))
+            .filter((File.is_from_zip_file == False), (FileType.name == "zip"))  # noqa: E712
             .label("zip_files"),
             # Count files that are inside zip files
             func.count(func.distinct(File.file_id))
