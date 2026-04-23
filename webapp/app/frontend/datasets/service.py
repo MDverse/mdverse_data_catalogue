@@ -4,10 +4,6 @@ from mdverse.database.database import (
     DatasetAuthorLink,
     DataSource,
     File,
-    FileType,
-    ParameterFile,
-    TopologyFile,
-    TrajectoryFile,
 )
 from sqlalchemy import desc, func
 from sqlalchemy.orm import selectinload
@@ -92,7 +88,7 @@ def get_all_datasets_for_datatables(
     return results
 
 
-def get_dataset_info_by_id(session: Session, dataset_id: int):
+def get_dataset_info_by_id(session: Session, dataset_id: int) -> tuple[Dataset, int]:
     """
     Returns dataset from its id.
     """
@@ -107,53 +103,14 @@ def get_dataset_info_by_id(session: Session, dataset_id: int):
         .where(Dataset.dataset_id == dataset_id)
     )
 
-    # Count how many total files, topology, parameter, and
-    # trajectory files are in the dataset
-    statement_total_files = (
-        select(
-            func.count(File.file_id).label("total_all_files"),
-            func.count(File.file_id)
-            .filter(FileType.name == "gro")
-            .label("total_topology_files"),
-            func.count(File.file_id)
-            .filter(FileType.name == "mdp")
-            .label("total_parameter_files"),
-            func.count(File.file_id)
-            .filter(FileType.name == "xtc")
-            .label("total_trajectory_files"),
-        )
-        .join(FileType, File.file_type_id == FileType.file_type_id)
-        .where(File.dataset_id == dataset_id)
-    )
+    # Count how many total files are in the dataset.
+    statement_total_files = select(
+        func.count(File.file_id).label("total_all_files")
+    ).where(File.dataset_id == dataset_id)
 
-    # Count how many files have been analysed for this dataset,
-    # a.k.a. how many are actually in the tables
-    statement_analysed_files = select(
-        (
-            select(func.count(TopologyFile.file_id))
-            .select_from(TopologyFile)
-            .join(File, File.file_id == TopologyFile.file_id, isouter=True)
-            .where(File.dataset_id == dataset_id)
-        ).label("analysed_topology_files"),
-        (
-            select(func.count(ParameterFile.file_id))
-            .select_from(ParameterFile)
-            .join(File, File.file_id == ParameterFile.file_id, isouter=True)
-            .where(File.dataset_id == dataset_id)
-        ).label("analysed_parameter_files"),
-        (
-            select(func.count(TrajectoryFile.file_id))
-            .select_from(TrajectoryFile)
-            .join(File, File.file_id == TrajectoryFile.file_id, isouter=True)
-            .where(File.dataset_id == dataset_id)
-        ).label("analysed_trajectory_files"),
-    )
-
-    result_dataset = session.exec(statement_dataset).first()
-    result_total_files = session.exec(statement_total_files).first()
-    result_analysed_files = session.exec(statement_analysed_files).first()
-
-    return result_dataset, result_total_files, result_analysed_files
+    dataset = session.exec(statement_dataset).first()
+    total_files = session.exec(statement_total_files).first()
+    return dataset, total_files
 
 
 def get_all_files_from_dataset(session: Session, dataset_id: int) -> list[File]:
@@ -168,5 +125,5 @@ def get_all_files_from_dataset(session: Session, dataset_id: int) -> list[File]:
         )
         .where(File.dataset_id == dataset_id)
     )
-    results = session.exec(statement).all()
-    return results
+    all_files = session.exec(statement).all()
+    return all_files

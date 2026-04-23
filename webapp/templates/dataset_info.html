@@ -1,74 +1,102 @@
-{# Diplay title only from all datasets page #}
-{% if request.headers["hx-target"] == "dataset_details" %}
-<h2>Dataset details</h2>
-{% endif %}
+{% extends "base.html" %}
 
-<div class="box">
-        <p class="title">
-            {{ dataset.title }}
-        </p>
-        <p class="subtitle">
-            {% if dataset.author %}
-                {% for author in dataset.author %}
-                    {{ author.name }}{% if not loop.last %}; {% endif %}
-                {% endfor %}
-            {% else %}
-            N/A
-            {% endif %}
-        </p>
+{% block main %}
+<section class="section">
 
-        <hr class="bd-hr">
-
-        <div class="columns">
-            <div class="column">
-                <p class="title is-5">General information</p>
-                <ul>
-                    <li>Dataset: <a href="{{ dataset.url_in_data_source }}" target="_blank">{{ dataset.id_in_data_source }}</a> from {{ dataset.data_source.name if dataset.data_source.name else 'N/A' }}</li>
-                    <li>License: {{ dataset.license }}</li>
-                    <li>DOI: <a href="https://doi.org/{{ dataset.doi }}" target="_blank">{{ dataset.doi }}</a></li>
-                </ul>
-            </div>
-            <div class="column">
-                <p class="title is-5">Additional information</p>
-                <ul>
-                    <li>Number of files: {{ dataset.file_number }}&nbsp;&nbsp;&nbsp;&nbsp;→&nbsp;&nbsp;
-                        {# Diplay button to access files for a given dataset #}
-                        {# only from all datasets page #}
-                        {% if request.headers["hx-target"] == "dataset_details" %}
-                        <a href="/datasets/{{ dataset.dataset_id }}/files" class="button is-info is-small">
-                            See file list
-                        </a>
-                        {% endif %}
-                    </li>
-                    <li>Number of downloads: {{ dataset.download_number }}</li>
-                    <li>Number of views: {{ dataset.view_number }}</li>
-                </ul>
-            </div>
-            <div class="column">
-                <p class="title is-5">Timeline</p>
-                <ul>
-                    <li>Date created: {{ dataset.date_created }}</li>
-                    <li>Date last modified: {{ dataset.date_last_modified }}</li>
-                    <li>Date last crawled: {{ dataset.date_last_crawled }}</li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="content">
-            <p class="title is-5">Description</p>
-            <p>{{ dataset.description }}</p>
-        </div>
-
-        <div class="content">
-            <p class="title is-5">Keywords</p>
-            <p>
-                {% if dataset.keywords %}
-                    {% for keyword in dataset.keywords.split(';') %}
-                        <span class="tag">{{ keyword.strip() }}</span>
+    <div class="box">
+            <p class="title">
+                {{ dataset.title }}
+            </p>
+            <p class="subtitle">
+                {% if dataset.author %}
+                    {% for author in dataset.author %}
+                        {{ author.name }}{% if not loop.last %}; {% endif %}
                     {% endfor %}
                 {% else %}
-                    N/A
+                N/A
                 {% endif %}
             </p>
-        </div>
-</div>
+
+            <hr class="bd-hr">
+
+            <div class="columns">
+                <div class="column">
+                    <p class="title is-5">General information</p>
+                    <ul>
+                        <li>Dataset: <a href="{{ dataset.url_in_data_source }}" target="_blank">{{ dataset.id_in_data_source }}</a> from {{ dataset.data_source.name if dataset.data_source.name else 'N/A' }}</li>
+                        <li>License: {{ dataset.license }}</li>
+                        <li>DOI: <a href="https://doi.org/{{ dataset.doi }}" target="_blank">{{ dataset.doi }}</a></li>
+                    </ul>
+                </div>
+                <div class="column">
+                    <p class="title is-5">Additional information</p>
+                    <ul>
+                        <li>Number of files: {{ dataset.file_number }}</li>
+                        <li>Number of downloads: {{ dataset.download_number }}</li>
+                        <li>Number of views: {{ dataset.view_number }}</li>
+                    </ul>
+                </div>
+                <div class="column">
+                    <p class="title is-5">Timeline</p>
+                    <ul>
+                        <li>Date created: {{ dataset.date_created }}</li>
+                        <li>Date last modified: {{ dataset.date_last_modified }}</li>
+                        <li>Date last crawled: {{ dataset.date_last_crawled }}</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="content">
+                <p class="title is-5">Description</p>
+                <p>{{ dataset.description }}</p>
+            </div>
+
+            <div class="content">
+                <p class="title is-5">Keywords</p>
+                <p>
+                    {% if dataset.keywords %}
+                        {% for keyword in dataset.keywords.split(';') %}
+                            <span class="tag">{{ keyword.strip() }}</span>
+                        {% endfor %}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+    </div>
+</section>
+
+<section class="section">
+    <h2>{{ total_files }} files</h2>
+    <table id="all_files_table" class="table is-striped is-hoverable" style="width:100%; table-layout: fixed;">
+        <thead>
+            <tr>
+                <th>name</th>
+                <th>type</th>
+                <th class="has-text-left">size (B)</th>
+                <th>url</th>
+                <th>Is from zip file?</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for file in all_files %}
+            <tr>
+                <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">{{ file.name }}</td>
+                <td>{{ file.file_type.name }}</td>
+                <td class="has-text-left">{{ "{:,.0f}".format(file.size_in_bytes) }}</td>
+                <td><a href="{{ file.url }}" target="_blank">🌐</a></td>
+                <td>{{ file.is_from_zip_file }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</section>
+{% endblock %}
+
+
+{% block script_extra %}
+<script>
+    $('#all_files_table').DataTable({});
+</script>
+{% endblock %}

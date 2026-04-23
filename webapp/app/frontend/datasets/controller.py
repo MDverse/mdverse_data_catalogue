@@ -83,54 +83,14 @@ async def get_datasets_for_datatables(request: Request, session: SessionDep):
 
 @router.get("/datasets/{dataset_id}", response_class=HTMLResponse)
 async def get_dataset_info(request: Request, session: SessionDep, dataset_id: int):
-    dataset, _, _ = service.get_dataset_info_by_id(session, dataset_id)
-    return templates.TemplateResponse(
-        request=request, name="dataset_info.html", context={"dataset": dataset}
-    )
-
-
-@router.get("/datasets/{dataset_id}/files", response_class=HTMLResponse)
-async def get_dataset_files(request: Request, session: SessionDep, dataset_id: int):
-    dataset, total_files, analysed_files = service.get_dataset_info_by_id(
-        session, dataset_id
-    )
-    return templates.TemplateResponse(
-        request=request,
-        name="dataset_files_page.html",
-        context={
-            "dataset": dataset,
-            "total_files": total_files,
-            "analysed_files": analysed_files,
-        },
-    )
-
-
-@router.get("/datasets/{dataset_id}/files/all", response_class=HTMLResponse)
-async def get_dataset_all_files(request: Request, session: SessionDep, dataset_id: int):
+    dataset, total_files = service.get_dataset_info_by_id(session, dataset_id)
     all_files = service.get_all_files_from_dataset(session, dataset_id)
     return templates.TemplateResponse(
         request=request,
-        name="dataset_files_all_table.html",
-        context={"all_files": all_files},
-    )
-
-
-@router.get("/datasets/{dataset_id}/files/gro", response_class=HTMLResponse)
-async def get_dataset_gro_files(request: Request, session: SessionDep, dataset_id: int):
-    return templates.TemplateResponse(
-        request=request, name="gro_files_table.html", context={"dataset_id": dataset_id}
-    )
-
-
-@router.get("/datasets/{dataset_id}/files/mdp", response_class=HTMLResponse)
-async def get_dataset_mdp_files(request: Request, session: SessionDep, dataset_id: int):
-    return templates.TemplateResponse(
-        request=request, name="mdp_files_table.html", context={"dataset_id": dataset_id}
-    )
-
-
-@router.get("/datasets/{dataset_id}/files/xtc", response_class=HTMLResponse)
-async def get_dataset_xtc_files(request: Request, session: SessionDep, dataset_id: int):
-    return templates.TemplateResponse(
-        request=request, name="xtc_files_table.html", context={"dataset_id": dataset_id}
+        name="dataset_info.html",
+        context={
+            "dataset": dataset,
+            "total_files": total_files,
+            "all_files": all_files,
+        },
     )
