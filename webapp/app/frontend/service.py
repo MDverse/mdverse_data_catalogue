@@ -37,23 +37,11 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
             func.count(func.distinct(Dataset.dataset_id)).label("number_of_datasets"),
             func.min(Dataset.date_created).label("first_dataset"),
             func.max(Dataset.date_created).label("last_dataset"),
-            # Count files that are not zip files, also is_from_zip_file == False
-            func.count(func.distinct(File.file_id))
-            .filter((File.is_from_zip_file == False), (FileType.name != "zip"))  # noqa: E712
-            .label("non_zip_files"),
             # Sum size of files that has is_from_zip_file == False
             (
                 func.sum(File.size_in_bytes).filter(File.is_from_zip_file == False)  # noqa: E712
                 / 1e9
             ).label("total_size_in_GB_non_zip_and_zip_files"),
-            # Count parent zip files (FileType.name == 'zip')
-            func.count(func.distinct(File.file_id))
-            .filter((File.is_from_zip_file == False), (FileType.name == "zip"))  # noqa: E712
-            .label("zip_files"),
-            # Count files that are inside zip files
-            func.count(func.distinct(File.file_id))
-            .filter(File.is_from_zip_file)
-            .label("files_within_zip_files"),
             # Total files (outside-non-zip_parent + parent zips + inside zips)
             func.count(func.distinct(File.file_id)).label("total_files"),
         )
@@ -82,15 +70,6 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
         )
         if any(row.last_dataset for row in datasets_stats_results)
         else None,
-        "non_zip_files": "{:,}".format(
-            sum(row.non_zip_files for row in datasets_stats_results)
-        ),
-        "zip_files": "{:,}".format(
-            sum(row.zip_files for row in datasets_stats_results)
-        ),
-        "files_in_zip_files": "{:,}".format(
-            sum(row.files_within_zip_files for row in datasets_stats_results)
-        ),
         "total_files": "{:,}".format(
             sum(row.total_files for row in datasets_stats_results)
         ),

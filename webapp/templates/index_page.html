@@ -63,11 +63,8 @@
                             <th>Number of datasets</th>
                             <th>First dataset</th>
                             <th>Last dataset</th>
-                            <th>Non-zip files</th>
-                            <th>Zip files</th>
-                            <th>Files in zip files</th>
                             <th>Total files</th>
-                            <th><abbr title="Total size in GB for non-zip and zip files">Size (GB)</abbr></th>
+                            <th>Total size (GB)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -77,9 +74,6 @@
                             <td>{{ "{:,}".format(row.number_of_datasets) }}</td>
                             <td>{{ "-" if not row.first_dataset else row.first_dataset.split("T")[0] }}</td>
                             <td>{{ "-" if not row.last_dataset else row.last_dataset.split("T")[0] }}</td>
-                            <td>{{ "{:,}".format(row.non_zip_files) }}</td>
-                            <td>{{ "{:,}".format(row.zip_files) }}</td>
-                            <td>{{ "{:,}".format(row.files_within_zip_files) }}</td>
                             <td>{{ "{:,}".format(row.total_files) }}</td>
                             <td>{{ "{:,.0f}".format(row.total_size_in_GB_non_zip_and_zip_files) }}</td>
                         </tr>
