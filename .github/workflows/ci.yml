@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -11,40 +12,40 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
-    - name: Install Python
-      run: uv python install
+      - name: Install Python
+        run: uv python install
 
-    - name: Install python dependencies
-      run: uv sync --locked --dev
+      - name: Install python dependencies
+        run: uv sync --locked --dev
 
-    - name: Run pre-commit hooks
-      run: uv run prek
+      - name: Run pre-commit hooks
+        run: uv run prek
 
   tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
-    - name: Install Python
-      run: uv python install
+      - name: Install Python
+        run: uv python install
 
-    - name: Install python dependencies
-      run: uv sync --locked --dev
+      - name: Install python dependencies
+        run: uv sync --locked --dev
 
-    - name: Run tests
-      run: uv run pytest -m "not network"
+      - name: Run tests
+        run: uv run pytest -m "not network" tests/
