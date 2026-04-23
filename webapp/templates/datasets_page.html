@@ -19,20 +19,17 @@
     <table id="datasets_table" class="table is-striped is-hoverable is-size-8" style="width:100%;">
         <thead>
             <tr>
-                <th class="is-vcentered">see more</th>
-                <th class="is-vcentered">source</th>
-                <th class="is-vcentered">source id</th>
-                <th class="is-vcentered">title</th>
+                <th class="is-vcentered">view dataset</th>
+                <th class="is-vcentered has-text-left">source</th>
+                <th class="is-vcentered has-text-left">source id</th>
+                <th class="is-vcentered has-text-left">title</th>
                 <th class="is-vcentered">created</th>
                 <th class="is-vcentered">files</th>
-                <th class="is-vcentered">description</th>
-                <th class="is-vcentered">author(s)</th>
+                <th class="is-vcentered has-text-left">description</th>
+                <th class="is-vcentered has-text-left">author(s)</th>
             </tr>
         </thead>
     </table>
-    <!-- Dataset details when we click on a row from the dataset table -->
-    <div id="dataset_details">
-    </div>
 </section>
 {% endblock %}
 
@@ -48,7 +45,7 @@
                 data: 'dataset_id',
                 render: function(data, type, row) {
                     // data: the entire row data
-                    return '<button class="button is-small" hx-trigger="click" hx-get="/datasets/'+ data + '" hx-swap="innerHTML" hx-target="#dataset_details">🔍</button>';
+                    return '<a href="/datasets/' + data + '" target="_blank" >🔍</a>';
                 }
             },
             { // origin
@@ -64,7 +61,7 @@
             },
             { // title
                 data: 'title',
-                render: $.fn.dataTable.render.ellipsis(28),
+                render: $.fn.dataTable.render.ellipsis(35),
             },
             { // date created
                  data: 'date_created'
@@ -74,7 +71,7 @@
             },
             { // description
                 data: 'description',
-                render: $.fn.dataTable.render.ellipsis(20),
+                render: $.fn.dataTable.render.ellipsis(30),
             },
             { // author(s)
                 data: 'author',
@@ -94,6 +91,7 @@
             { width: '30%', targets:  6 },  // description
             { width: '12%', targets:  7 },  // authors
             { className: 'dt-center', targets: "_all" },  // center align all columns
+            { className: 'has-text-left', targets: [1, 2, 3, 6, 7] },  // left align source, source id, title, description, and authors columns
         ],
         // https://datatables.net/reference/option/drawCallback
         "drawCallback": function(settings) {
