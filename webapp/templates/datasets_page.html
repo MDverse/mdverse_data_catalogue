@@ -24,10 +24,7 @@
                 <th class="is-vcentered">source id</th>
                 <th class="is-vcentered">title</th>
                 <th class="is-vcentered">created</th>
-                <th class="is-vcentered">last modified</th>
                 <th class="is-vcentered">files</th>
-                <th class="is-vcentered">downloads</th>
-                <th class="is-vcentered">views</th>
                 <th class="is-vcentered">description</th>
                 <th class="is-vcentered">author(s)</th>
             </tr>
@@ -72,17 +69,8 @@
             { // date created
                  data: 'date_created'
             },
-            { // date last modified
-                data: 'date_last_modified'
-            },
             { // number of files
                 data: 'file_number'
-            },
-            { // number of downloads
-                data: 'download_number'
-            },
-            { // number of views
-                data: 'view_number'
             },
             { // description
                 data: 'description',
@@ -99,15 +87,12 @@
         columnDefs: [
             { width:  '5%', targets:  0, orderable: false },  // details button
             { width:  '6%', targets:  1 },  // dataset origin
-            { width:  '6%', targets:  2 },  // dataset id in origin
+            { width:  '8%', targets:  2 },  // dataset id in origin
             { width: '28%', targets:  3 },  // title
             { width: '10%', targets:  4 },  // date created
-            { width: '10%', targets:  5 },  // date last modified
-            { width:  '1%', targets:  6 },  // number of files
-            { width:  '1%', targets:  7 },  // number of downloads
-            { width:  '1%', targets:  8 },  // number of views
-            { width: '20%', targets:  9 },  // description
-            { width: '12%', targets:  10 },  // authors
+            { width:  '1%', targets:  5 },  // number of files
+            { width: '30%', targets:  6 },  // description
+            { width: '12%', targets:  7 },  // authors
             { className: 'dt-center', targets: "_all" },  // center align all columns
         ],
         // https://datatables.net/reference/option/drawCallback

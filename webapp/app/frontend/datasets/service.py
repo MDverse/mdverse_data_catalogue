@@ -45,10 +45,7 @@ def get_all_datasets_for_datatables(
             Dataset.title,
             Dataset.description,
             Dataset.date_created,
-            Dataset.date_last_modified,
             Dataset.file_number,
-            Dataset.download_number,
-            Dataset.view_number,
             Dataset.url_in_data_source.label("url"),
             func.group_concat(Author.name, "; ").label("author"),
         )
@@ -62,10 +59,7 @@ def get_all_datasets_for_datatables(
             Dataset.title,
             Dataset.description,
             Dataset.date_created,
-            Dataset.date_last_modified,
             Dataset.file_number,
-            Dataset.download_number,
-            Dataset.view_number,
             Dataset.url_in_data_source,
         )
     )
