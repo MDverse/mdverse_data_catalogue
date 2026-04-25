@@ -4,9 +4,10 @@ Parquet files and codebook are available on Zenodo: [10.5281/zenodo.7856523](htt
 
 See [CONTRIBUTING](CONTRIBUTING.md) if you want to contribute to this project.
 
-## Setup your environment
+## Setup the environment
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+We use [uv](https://docs.astral.sh/uv/getting-started/installation/)
+to manage dependencies and the project software environment.
 
 Clone this repository:
 
@@ -28,6 +29,7 @@ uv sync
 
 > **Note:** This project requires PyArrow >= 23.0.1. If you encounter errors
 > related to parquet files, upgrade PyArrow by running:
+>
 > ```sh
 > uv add --upgrade pyarrow
 > ```
@@ -215,14 +217,13 @@ uv run scripts/upload_datasets_to_zenodo.py --record 7856524 \
 
 ## Build database
 
-
 ### Create the empty database
 
 ```sh
 uv run database-create
 ```
 
-###  Ingest datasets (all sources)
+### Ingest datasets (all sources)
 
 Run the datasets parquet for each source first. This populates the `datasets`,
 `authors`, and `data_sources` tables.
@@ -232,7 +233,7 @@ uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_d
 # same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
 ```
 
-###  Ingest files (all sources)
+### Ingest files (all sources)
 
 Once all datasets are ingested, run the files parquet for each source.
 This populates the `files` and `file_types` tables.
@@ -242,7 +243,7 @@ uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_f
 # same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
 ```
 
-###  Verify the database
+### Verify the database
 
 ```sh
 uv run database-report
@@ -287,3 +288,8 @@ or
 
 ```sh
 uv run src/ingest_traj_files.py
+```
+
+## Web application and API
+
+See [webapp](webapp/README.md)

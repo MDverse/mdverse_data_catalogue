@@ -2,8 +2,8 @@
 
 {% block head_extra %}
 <!-- Bokeh CSS + JS -->
-<link rel="stylesheet" href="https://cdn.bokeh.org/bokeh/release/bokeh-2.4.3.min.css" type="text/css">
-<script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-3.6.3.min.js"></script>
+<link rel="stylesheet" href="https://cdn.bokeh.org/bokeh/release/bokeh-3.9.0.min.css" type="text/css">
+<script type="text/javascript" src="https://cdn.bokeh.org/bokeh/release/bokeh-3.9.0.min.js"></script>
 {% endblock %}
 
 {% block main %}
@@ -17,7 +17,7 @@
 
     <div class="content pt-4" style="overflow-wrap: break-word;">
         <p>
-            MDverse is a data catalogue that indexes and annotates molecular dynamics (MD) simulations. See <a href="/about">about</a> for more informations.
+            MDverse is a data catalogue that indexes and annotates molecular dynamics (MD) simulations. See <a href="/about">about</a> for more information.
         </p>
     </div>
     <nav class="level py-4 has-background-white-bis">
@@ -63,11 +63,8 @@
                             <th>Number of datasets</th>
                             <th>First dataset</th>
                             <th>Last dataset</th>
-                            <th>Non-zip files</th>
-                            <th>Zip files</th>
-                            <th>Files in zip files</th>
                             <th>Total files</th>
-                            <th><abbr title="Total size in GB for non-zip and zip files">Size (GB)</abbr></th>
+                            <th>Total size (GB)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -75,11 +72,8 @@
                         <tr>
                             <td>{{ row.dataset_origin }}</td>
                             <td>{{ "{:,}".format(row.number_of_datasets) }}</td>
-                            <td>{{ row.first_dataset }}</td>
-                            <td>{{ row.last_dataset }}</td>
-                            <td>{{ "{:,}".format(row.non_zip_files) }}</td>
-                            <td>{{ "{:,}".format(row.zip_files) }}</td>
-                            <td>{{ "{:,}".format(row.files_within_zip_files) }}</td>
+                            <td>{{ "-" if not row.first_dataset else row.first_dataset.split("T")[0] }}</td>
+                            <td>{{ "-" if not row.last_dataset else row.last_dataset.split("T")[0] }}</td>
                             <td>{{ "{:,}".format(row.total_files) }}</td>
                             <td>{{ "{:,.0f}".format(row.total_size_in_GB_non_zip_and_zip_files) }}</td>
                         </tr>
@@ -100,11 +94,6 @@
     <div class="card">
         <div class="card-content">
             <div class="content">
-                <div style="text-align: center;">
-                    <button id="filesBtn" class="toggle-btn active">Number of files per year</button>
-                    <button id="datasetsBtn" class="toggle-btn">Number of datasets per year</button>
-                </div>
-
                 <!-- Plot container using Flexbox to center child elements -->
                 <div class="plot-section" style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
                     <!-- By default, show the files plot -->
@@ -112,57 +101,20 @@
                         {{ files_plot_div | safe }}
                     </div>
                     <!-- The datasets plot is hidden by default -->
-                    <div id="datasetsPlot" style="width: 1000px; display: none;">
+                    <div id="datasetsPlot" style="width: 1000px;">
                         {{ datasets_plot_div | safe }}
                     </div>
                 </div>
-            
-                <!-- Bokeh scripts (both plots' scripts) -->
-                {{ files_plot_script | safe }}
-                {{ datasets_plot_script | safe }}
             </div>
         </div>
     </div>
-    <div class="card">
-        <div class="card-image">
-            <figure class="image">
-                <img src="/static/wordcloud.png" alt="Wordcloud of words datasets" width="100%"/>
-            </figure>
-        </div>
-    </div>
-
-    <!-- <section class="section is-spaced has-background-white-ter">
-        <h3 class="title is-3 has-text-centered">Developments</h3>
-        <div class="grid has-2-cols has-text-centered py-4 is-primary">
-            <div class="cell">Cell 1</div>
-            <div class="cell">Cell 1</div>
-            <div class="cell">Cell 1</div>
-            <div class="cell">Cell 1</div>
-        </div>
-    </section> -->
-    
 </section>
 {% endblock %}
 
 {% block script_extra %}
-    <!-- JavaScript to toggle the plots -->
-    <script>
-        $(document).ready(function() {
-            $("#filesBtn").click(function(){
-                $(this).addClass("active");
-                $("#datasetsBtn").removeClass("active");
-                $("#filesPlot").show();
-                $("#datasetsPlot").hide();
-            });
-            $("#datasetsBtn").click(function(){
-                $(this).addClass("active");
-                $("#filesBtn").removeClass("active");
-                $("#datasetsPlot").show();
-                $("#filesPlot").hide();
-            });
-        });
-    </script>
-
+    <!-- Bokeh scripts (both plots' scripts) -->
+    {{ files_plot_script | safe }}
+    {{ datasets_plot_script | safe }}
     <!-- Script that initializes DataTables -->
     <script type="text/javascript">
         $(document).ready(function() {

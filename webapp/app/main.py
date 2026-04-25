@@ -14,7 +14,7 @@ print(f"Running FastAPI app from: {pathlib.Path().absolute()}")
 
 # Create FastAPI app
 app = FastAPI(title="MDverse")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
 
 # Frontend endpoints
 app.include_router(frontend_router)

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+from ...dependencies import SessionDep
 from . import service
 
 router = APIRouter(
@@ -11,40 +12,40 @@ router = APIRouter(
     tags=["frontend"],
 )
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="webapp/templates")
 
 
 @router.get("/file_types", response_class=HTMLResponse)
-async def file_types_table(request: Request):
-    file_type_stats_summary = service.get_file_types_stats()
+async def file_types_table(request: Request, session: SessionDep):
+    file_type_stats_summary = service.get_file_types_stats(session)
     return templates.TemplateResponse(
-        "file_types_page.html",
-        {
-            "request": request,
+        name="file_types_page.html",
+        request=request,
+        context={
             "file_type_stats_summary": file_type_stats_summary,
-        }
+        },
     )
 
-# Render the button to downlaod all files for a given file type.
+
+# Render the button to download all files for a given file type.
 # Endpoint triggered by HTMX.
 @router.get("/file_types/{file_type}/download_info", response_class=HTMLResponse)
 async def display_button_to_download_file_list(request: Request, file_type: str):
     return templates.TemplateResponse(
-        "file_types_download_info.html",
-        {
-            "request": request,
+        name="file_types_download_info.html",
+        request=request,
+        context={
             "file_type": file_type,
-        }
+        },
     )
+
 
 # Download the list of files for a given file type.
 @router.get("/file_types/{file_type}/download_list/")
-async def download_file_list(file_type: str):
-    df = service.get_list_of_files_for_a_file_type(file_type)
+async def download_file_list(session: SessionDep, file_type: str):
+    df = service.get_list_of_files_for_a_file_type(session, file_type)
     tsv_data = df.to_csv(index=False, sep="\t")
-    headers = {
-        "Content-Disposition": f"attachment; filename=mdverse_{file_type}.tsv"
-    }
+    headers = {"Content-Disposition": f"attachment; filename=mdverse_{file_type}.tsv"}
     return Response(content=tsv_data, media_type="text/tsv", headers=headers)
 
 
@@ -54,11 +55,13 @@ async def download_file_list(file_type: str):
 @router.get("/file_types/gro", response_class=HTMLResponse)
 async def display_gro_files_page(request: Request):
     return templates.TemplateResponse(
-        "gro_files_page.html",
-        {
+        name="gro_files_page.html",
+        request=request,
+        context={
             "request": request,
-        }
+        },
     )
+
 
 @router.get("/file_types/gro/datatables", response_class=JSONResponse)
 async def get_gro_files_for_datatables(request: Request, dataset_id: int | None = None):
@@ -77,7 +80,7 @@ async def get_gro_files_for_datatables(request: Request, dataset_id: int | None 
     Returns
     -------
     dict
-        JSON dictionnary for DataTables.
+        JSON dictionary for DataTables.
     """
     print("Hello from /files/topologie/")
     print("dataset_id", dataset_id)
@@ -89,11 +92,15 @@ async def get_gro_files_for_datatables(request: Request, dataset_id: int | None 
     sort_direction = "asc"
     if params("order[0][dir]") == "desc":
         sort_direction = "desc"
-    number_of_top_files_total = len(service.get_gro_files_for_datatables(dataset_id=dataset_id))
-    number_of_top_files_filtered = len(service.get_gro_files_for_datatables(
-        dataset_id=dataset_id,
-        search=params("search[value]"),
-    ))
+    number_of_top_files_total = len(
+        service.get_gro_files_for_datatables(dataset_id=dataset_id)
+    )
+    number_of_top_files_filtered = len(
+        service.get_gro_files_for_datatables(
+            dataset_id=dataset_id,
+            search=params("search[value]"),
+        )
+    )
     top_files = service.get_gro_files_for_datatables(
         dataset_id=dataset_id,
         sort_column_name=sort_column_name,
@@ -103,7 +110,7 @@ async def get_gro_files_for_datatables(request: Request, dataset_id: int | None 
         search=params("search[value]"),
     )
     # Serialize SQLmodel results to JSON
-    data = [ row._mapping for row in top_files ]
+    data = [row._mapping for row in top_files]
     return {
         "draw": params("draw"),
         "recordsTotal": number_of_top_files_total,
@@ -111,17 +118,17 @@ async def get_gro_files_for_datatables(request: Request, dataset_id: int | None 
         "data": data,
     }
 
+
 # ============================================================================
 # MDP files
 # ============================================================================
 @router.get("/file_types/mdp", response_class=HTMLResponse)
 async def display_mdp_files_page(request: Request):
     return templates.TemplateResponse(
-        "mdp_files_page.html",
-        {
-            "request": request,
-        }
+        name="mdp_files_page.html",
+        request=request,
     )
+
 
 @router.get("/file_types/mdp/datatables", response_class=JSONResponse)
 async def get_mdp_files_for_datatables(request: Request, dataset_id: int | None = None):
@@ -140,7 +147,7 @@ async def get_mdp_files_for_datatables(request: Request, dataset_id: int | None 
     Returns
     -------
     dict
-        JSON dictionnary for DataTables.
+        JSON dictionary for DataTables.
     """
     print("dataset_id", dataset_id)
     params = request.query_params.get
@@ -151,11 +158,15 @@ async def get_mdp_files_for_datatables(request: Request, dataset_id: int | None 
     sort_direction = "asc"
     if params("order[0][dir]") == "desc":
         sort_direction = "desc"
-    number_of_mdp_files_total = len(service.get_mdp_files_for_datatables(dataset_id=dataset_id))
-    number_of_mdp_files_filtered = len(service.get_mdp_files_for_datatables(
-        dataset_id=dataset_id,
-        search=params("search[value]"),
-    ))
+    number_of_mdp_files_total = len(
+        service.get_mdp_files_for_datatables(dataset_id=dataset_id)
+    )
+    number_of_mdp_files_filtered = len(
+        service.get_mdp_files_for_datatables(
+            dataset_id=dataset_id,
+            search=params("search[value]"),
+        )
+    )
     mdp_files = service.get_mdp_files_for_datatables(
         dataset_id=dataset_id,
         sort_column_name=sort_column_name,
@@ -165,13 +176,14 @@ async def get_mdp_files_for_datatables(request: Request, dataset_id: int | None 
         search=params("search[value]"),
     )
     # Serialize SQLmodel results to JSON
-    data = [ row._mapping for row in mdp_files ]
+    data = [row._mapping for row in mdp_files]
     return {
         "draw": params("draw"),
         "recordsTotal": number_of_mdp_files_total,
         "recordsFiltered": number_of_mdp_files_filtered,
         "data": data,
     }
+
 
 # ============================================================================
 # XTC files
@@ -193,7 +205,7 @@ async def get_xtc_files_for_datatables(request: Request, dataset_id: int | None 
     Returns
     -------
     dict
-        JSON dictionnary for DataTables.
+        JSON dictionary for DataTables.
     """
     params = request.query_params.get
     sort_column_name = "dataset_origin"
@@ -203,11 +215,15 @@ async def get_xtc_files_for_datatables(request: Request, dataset_id: int | None 
     sort_direction = "asc"
     if params("order[0][dir]") == "desc":
         sort_direction = "desc"
-    number_of_mdp_files_total = len(service.get_xtc_files_for_datatables(dataset_id=dataset_id))
-    number_of_mdp_files_filtered = len(service.get_xtc_files_for_datatables(
-        dataset_id=dataset_id,
-        search=params("search[value]"),
-    ))
+    number_of_mdp_files_total = len(
+        service.get_xtc_files_for_datatables(dataset_id=dataset_id)
+    )
+    number_of_mdp_files_filtered = len(
+        service.get_xtc_files_for_datatables(
+            dataset_id=dataset_id,
+            search=params("search[value]"),
+        )
+    )
     mdp_files = service.get_xtc_files_for_datatables(
         dataset_id=dataset_id,
         sort_column_name=sort_column_name,
@@ -217,7 +233,7 @@ async def get_xtc_files_for_datatables(request: Request, dataset_id: int | None 
         search=params("search[value]"),
     )
     # Serialize SQLmodel results to JSON
-    data = [ row._mapping for row in mdp_files ]
+    data = [row._mapping for row in mdp_files]
     return {
         "draw": params("draw"),
         "recordsTotal": number_of_mdp_files_total,
