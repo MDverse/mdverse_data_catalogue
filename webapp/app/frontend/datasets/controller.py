@@ -36,7 +36,6 @@ async def get_datasets_for_datatables(request: Request, session: SessionDep):
 
     See:
     - https://datatables.net/manual/server-side
-    - https://blog.stackpuz.com/create-an-api-for-datatables-with-fastapi/
 
     Parameters
     ----------
@@ -49,11 +48,11 @@ async def get_datasets_for_datatables(request: Request, session: SessionDep):
         JSON dictionary for DataTables.
     """
     params = request.query_params.get
-    sort_column_name = "dataset_origin"
+    sort_column_name = "date_created"
     if params("order[0][column]"):
         sort_column_idx = params("order[0][column]")
         sort_column_name = params(f"columns[{sort_column_idx}][data]")
-    sort_direction = "asc"
+    sort_direction = "desc"
     if params("order[0][dir]") == "desc":
         sort_direction = "desc"
     number_of_datasets_total = len(service.get_all_datasets_for_datatables(session))
@@ -71,7 +70,7 @@ async def get_datasets_for_datatables(request: Request, session: SessionDep):
         length=params("length"),
         search=params("search[value]"),
     )
-    # Serialize SQLmodel results to JSON
+    # Serialize SQLmodel results to JSON.
     data = [row._mapping for row in datasets]
     return {
         "draw": params("draw"),

@@ -54,7 +54,6 @@ def get_all_datasets_for_datatables(
             Dataset.url_in_data_source,
         )
     )
-
     if sort_column_name is not None:
         if sort_direction == "asc":
             statement = statement.order_by(sort_column_name)
