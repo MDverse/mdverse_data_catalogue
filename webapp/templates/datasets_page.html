@@ -23,7 +23,7 @@
                 <th class="is-vcentered has-text-left">data repository</th>
                 <th class="is-vcentered has-text-left">source id</th>
                 <th class="is-vcentered has-text-left">title</th>
-                <th class="is-vcentered">created</th>
+                <th class="is-vcentered has-text-left">created</th>
                 <th class="is-vcentered">files</th>
                 <th class="is-vcentered has-text-left">description</th>
             </tr>
@@ -63,14 +63,14 @@
                 render: $.fn.dataTable.render.ellipsis(35),
             },
             { // date created
-                 data: 'date_created'
+                data: 'date_created'
             },
             { // number of files
                 data: 'file_number'
             },
             { // description
                 data: 'description',
-                render: $.fn.dataTable.render.ellipsis(30),
+                render: $.fn.dataTable.render.ellipsis(40),
             },
         ],
         orderClasses: false,
@@ -78,15 +78,16 @@
         scrollX: true,
         columnDefs: [
             { width:  '5%', targets:  0, orderable: false },  // details button
-            { width:  '6%', targets:  1 },  // dataset origin
+            { width:  '8%', targets:  1 },  // data repository
             { width:  '8%', targets:  2 },  // dataset id in origin
-            { width: '30%', targets:  3 },  // title
+            { width: '28%', targets:  3 },  // title
             { width: '10%', targets:  4 },  // date created
             { width:  '1%', targets:  5 },  // number of files
             { width: '40%', targets:  6 },  // description
             { className: 'dt-center', targets: "_all" },  // center align all columns
-            { className: 'has-text-left', targets: [1, 2, 3, 6] },  // left align source, source id, title, and description columns
+            { className: 'has-text-left', targets: [1, 2, 3, 4, 6] },  // left align source, source id, title, and description columns
         ],
+        order: [[4, "desc"]],  // by default, sort by date created, descending
         // https://datatables.net/reference/option/drawCallback
         "drawCallback": function(settings) {
             htmx.process('#datasets_table');
