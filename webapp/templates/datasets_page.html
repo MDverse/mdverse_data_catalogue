@@ -63,14 +63,18 @@
                 render: $.fn.dataTable.render.ellipsis(35),
             },
             { // date created
-                data: 'date_created'
+                data: 'date_created',
+                render: function(data, type, row) {
+                    // Convert date to YYYY-MM-DD format.
+                    return data.split("T")[0];
+                }
             },
             { // number of files
                 data: 'file_number'
             },
             { // description
                 data: 'description',
-                render: $.fn.dataTable.render.ellipsis(40),
+                render: $.fn.dataTable.render.ellipsis(50),
             },
         ],
         orderClasses: false,
@@ -78,12 +82,12 @@
         scrollX: true,
         columnDefs: [
             { width:  '5%', targets:  0, orderable: false },  // details button
-            { width:  '8%', targets:  1 },  // data repository
-            { width:  '8%', targets:  2 },  // dataset id in origin
-            { width: '28%', targets:  3 },  // title
-            { width: '10%', targets:  4 },  // date created
-            { width:  '1%', targets:  5 },  // number of files
-            { width: '40%', targets:  6 },  // description
+            { width:  '15%', targets:  1 },  // data repository
+            { width:  '10%', targets:  2 },  // dataset id in origin
+            { width: '30%', targets:  3 },  // title
+            { width: '8%', targets:  4 },  // date created
+            { width:  '2%', targets:  5 },  // number of files
+            { width: '30%', targets:  6 },  // description
             { className: 'dt-center', targets: "_all" },  // center align all columns
             { className: 'has-text-left', targets: [1, 2, 3, 4, 6] },  // left align source, source id, title, and description columns
         ],
