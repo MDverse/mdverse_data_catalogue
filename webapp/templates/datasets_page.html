@@ -20,13 +20,12 @@
         <thead>
             <tr>
                 <th class="is-vcentered">view dataset</th>
-                <th class="is-vcentered has-text-left">source</th>
+                <th class="is-vcentered has-text-left">data repository</th>
                 <th class="is-vcentered has-text-left">source id</th>
                 <th class="is-vcentered has-text-left">title</th>
                 <th class="is-vcentered">created</th>
                 <th class="is-vcentered">files</th>
                 <th class="is-vcentered has-text-left">description</th>
-                <th class="is-vcentered has-text-left">author(s)</th>
             </tr>
         </thead>
     </table>
@@ -48,7 +47,7 @@
                     return '<a href="/datasets/' + data + '" target="_blank" >🔍</a>';
                 }
             },
-            { // origin
+            { // data repository
                 data: 'dataset_origin'
             },
             { // id in origin
@@ -73,10 +72,6 @@
                 data: 'description',
                 render: $.fn.dataTable.render.ellipsis(30),
             },
-            { // author(s)
-                data: 'author',
-                render: $.fn.dataTable.render.ellipsis(12),
-            },
         ],
         orderClasses: false,
         autoWidth: false,
@@ -85,13 +80,12 @@
             { width:  '5%', targets:  0, orderable: false },  // details button
             { width:  '6%', targets:  1 },  // dataset origin
             { width:  '8%', targets:  2 },  // dataset id in origin
-            { width: '28%', targets:  3 },  // title
+            { width: '30%', targets:  3 },  // title
             { width: '10%', targets:  4 },  // date created
             { width:  '1%', targets:  5 },  // number of files
-            { width: '30%', targets:  6 },  // description
-            { width: '12%', targets:  7 },  // authors
+            { width: '40%', targets:  6 },  // description
             { className: 'dt-center', targets: "_all" },  // center align all columns
-            { className: 'has-text-left', targets: [1, 2, 3, 6, 7] },  // left align source, source id, title, description, and authors columns
+            { className: 'has-text-left', targets: [1, 2, 3, 6] },  // left align source, source id, title, and description columns
         ],
         // https://datatables.net/reference/option/drawCallback
         "drawCallback": function(settings) {
