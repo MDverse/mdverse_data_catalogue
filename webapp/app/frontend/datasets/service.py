@@ -47,11 +47,6 @@ def get_all_datasets_for_datatables(
             Dataset.dataset_id,
             DataSource.name,
             Dataset.id_in_data_source,
-            Dataset.title,
-            Dataset.description,
-            Dataset.date_created,
-            Dataset.file_number,
-            Dataset.url_in_data_source,
         )
     )
     if sort_column_name is not None:
