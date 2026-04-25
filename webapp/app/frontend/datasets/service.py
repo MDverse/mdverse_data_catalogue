@@ -1,7 +1,5 @@
 from mdverse.database.database import (
-    Author,
     Dataset,
-    DatasetAuthorLink,
     DataSource,
     File,
 )
@@ -43,11 +41,8 @@ def get_all_datasets_for_datatables(
             Dataset.date_created,
             Dataset.file_number,
             Dataset.url_in_data_source.label("url"),
-            func.group_concat(Author.name, "; ").label("author"),
         )
         .join(DataSource, Dataset.data_source_id == DataSource.data_source_id)
-        .join(DatasetAuthorLink, Dataset.dataset_id == DatasetAuthorLink.dataset_id)
-        .join(Author, DatasetAuthorLink.author_id == Author.author_id)
         .group_by(
             Dataset.dataset_id,
             DataSource.name,
@@ -79,7 +74,6 @@ def get_all_datasets_for_datatables(
                 Dataset.id_in_data_source.ilike(f"%{search}%"),
                 Dataset.title.ilike(f"%{search}%"),
                 Dataset.description.ilike(f"%{search}%"),
-                Author.name.ilike(f"%{search}%"),
             )
         )
     results = session.exec(statement).all()
