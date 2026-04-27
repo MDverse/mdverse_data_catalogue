@@ -59,32 +59,34 @@
                 <table id="SummaryTable" class="table is-striped is-hoverable is-size-8">
                     <thead>
                         <tr>
-                            <th>Dataset origin</th>
-                            <th>Number of datasets</th>
+                            <th class="is-vcentered has-text-left">Dataset origin</th>
+                            <th class="is-vcentered has-text-right">Number of datasets</th>
                             <th>First dataset</th>
                             <th>Last dataset</th>
-                            <th>Total files</th>
-                            <th>Total size (GB)</th>
+                            <th class="is-vcentered has-text-right">Total files</th>
+                            <th class="is-vcentered has-text-right">Total size (GB)</th>
                         </tr>
                     </thead>
                     <tbody>
                     {% for row in results %}
                         <tr>
-                            <td>{{ row.dataset_origin }}</td>
-                            <td>{{ "{:,}".format(row.number_of_datasets) }}</td>
+                            <td class="is-vcentered has-text-left">{{ row.dataset_origin }}</td>
+                            <td class="is-vcentered has-text-right">{{ "{:,}".format(row.number_of_datasets) }}</td>
                             <td>{{ "-" if not row.first_dataset else row.first_dataset.split("T")[0] }}</td>
                             <td>{{ "-" if not row.last_dataset else row.last_dataset.split("T")[0] }}</td>
-                            <td>{{ "{:,}".format(row.total_files) }}</td>
-                            <td>{{ "{:,.0f}".format(row.total_size_in_GB_non_zip_and_zip_files) }}</td>
+                            <td class="is-vcentered has-text-right">{{ "{:,}".format(row.total_files) }}</td>
+                            <td class="is-vcentered has-text-right">{{ "{:,.0f}".format(row.total_size_in_GB_non_zip_and_zip_files) }}</td>
                         </tr>
                     {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr>
-                        <td><strong>Total</strong></td>
-                        {% for key, value in total_count.items() %}
-                        <td><strong>{{ value|e }}</strong></td>
-                        {% endfor %}
+                            <td class="is-vcentered has-text-left">Total</td>
+                            <td class="is-vcentered has-text-right">{{ total_count["number_of_datasets"] }}</td>
+                            <td>{{ total_count["first_dataset"].split("T")[0] }}</td>
+                            <td>{{ total_count["last_dataset"].split("T")[0] }}</td>
+                            <td class="is-vcentered has-text-right">{{ total_count["total_files"] }}</td>
+                            <td class="is-vcentered has-text-right">{{ total_count["total_size_in_GB_non_zip_and_zip_files"] }}</td>
                         </tr>
                     </tfoot>
                 </table>
