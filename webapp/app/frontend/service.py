@@ -2,7 +2,6 @@ from datetime import datetime
 
 import numpy as np
 from bokeh.models import ColumnDataSource, NumeralTickFormatter
-from bokeh.palettes import d3
 from bokeh.plotting import figure
 from mdverse.database.database import (
     Dataset,
@@ -12,6 +11,17 @@ from mdverse.database.database import (
 )
 from sqlalchemy import extract, func
 from sqlmodel import Session, select
+
+COLORS = {
+    "atlas": "#EB5757",
+    "figshare": "#F2C80F",
+    "gpcrmd": "#D64550",
+    "mdposit_cineca_node": "#46B3F3",
+    "mdposit_inria_node": "#008CEE",
+    "mdposit_mmb_node": "#0641C8",
+    "nomad": "#E044A7",
+    "zenodo": "#0AAC00",
+}
 
 # ============================================================================
 # Queries for index.html
@@ -144,6 +154,14 @@ def extract_data_repository_names(session: Session):
 
 
 def create_files_plot(session: Session):
+    """Create a line plot with cumulative number of datasets per year.
+
+    One line per data repository.
+
+    Doc:
+    - https://docs.bokeh.org/en/latest/docs/user_guide/interaction/tools.html#ug-interaction-tools-hover-tool
+    - https://docs.bokeh.org/en/latest/docs/user_guide/interaction/legends.html
+    """
     repository_names = extract_data_repository_names(session)
     all_years = list(range(2012, datetime.now().year + 1))
 
@@ -152,33 +170,50 @@ def create_files_plot(session: Session):
     }
     for repository in repository_names:
         stats = get_files_yearly_counts_for_origin(session, repository)
-        data[repository] = [stats.get(year, 0) for year in all_years]
+        counts = np.array([stats.get(year, 0) for year in all_years])
+        data[repository] = np.cumsum(counts)
 
     source = ColumnDataSource(data=data)
 
     plot = figure(
         x_range=data["year"],
+        y_axis_type="log",
         height=600,
         width=1000,
-        title="Number of files per year per data repository",
+        title="Cumulative number of files by year and data repository",
         tooltips=[
             ("Year", "@year"),
             ("Data repository", "$name"),
-            ("Number of files", "@$name{0,0}"),
+            ("Number of files", "$snap_y{0,0}"),
         ],
+        tools="hover,box_zoom,reset,save",
         background_fill_color="#fafafa",
     )
 
+    for repository in repository_names:
+        plot.line(
+            x="year",
+            y=repository,
+            width=3,
+            source=source,
+            color=COLORS[repository],
+            legend_label=repository,
+            name=repository,
+        )
+        plot.scatter(
+            x="year",
+            y=repository,
+            size=8,
+            width=3,
+            source=source,
+            fill_color="white",
+            color=COLORS[repository],
+            legend_label=repository,
+            name=repository,
+        )
+
     plot.toolbar.active_drag = None
 
-    plot.vbar_stack(
-        stackers=repository_names,
-        x="year",
-        width=0.8,
-        source=source,
-        color=d3["Category20"][len(repository_names)],
-        legend_label=repository_names,
-    )
     plot.xaxis.axis_label = "Year"
     plot.yaxis.axis_label = "Number of files"
     plot.yaxis.formatter = NumeralTickFormatter(format="0,0")
@@ -193,6 +228,7 @@ def create_files_plot(session: Session):
     plot.legend.background_fill_alpha = 0.3
     plot.legend.border_line_color = None
     plot.legend.label_text_font_size = "10pt"
+    plot.legend.click_policy = "hide"
 
     return plot
 
@@ -234,29 +270,29 @@ def create_datasets_plot(session: Session):
         data[repository] = np.cumsum(counts)
 
     source = ColumnDataSource(data=data)
-    colors = d3["Category20"][len(repository_names)]
 
     plot = figure(
         x_range=data["year"],
         y_axis_type="log",
         height=600,
         width=1000,
-        title="Cumulative number of datasets per year per data repository",
+        title="Cumulative number of datasets by year and data repository",
         tooltips=[
             ("Year", "@year"),
             ("Data repository", "$name"),
             ("Number of datasets", "$snap_y{0,0}"),
         ],
+        tools="hover,box_zoom,reset,save",
         background_fill_color="#fafafa",
     )
 
-    for idx, repository in enumerate(repository_names):
+    for repository in repository_names:
         plot.line(
             x="year",
             y=repository,
-            width=2,
+            width=3,
             source=source,
-            color=colors[idx],
+            color=COLORS[repository],
             legend_label=repository,
             name=repository,
         )
@@ -264,13 +300,14 @@ def create_datasets_plot(session: Session):
             x="year",
             y=repository,
             size=8,
+            width=3,
             source=source,
             fill_color="white",
-            color=colors[idx],
+            color=COLORS[repository],
             legend_label=repository,
             name=repository,
         )
-    plot.legend.click_policy = "hide"
+
     plot.toolbar.active_drag = None
 
     plot.xaxis.axis_label = "Year"
@@ -287,5 +324,6 @@ def create_datasets_plot(session: Session):
     plot.legend.background_fill_alpha = 0.3
     plot.legend.border_line_color = None
     plot.legend.label_text_font_size = "10pt"
+    plot.legend.click_policy = "hide"
 
     return plot
