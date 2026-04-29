@@ -38,8 +38,9 @@ from .network import (
 )
 from .toolbox import print_statistics
 
-INDEX_URL = "https://www.dsimb.inserm.fr/ATLAS/"
+BASE_URL = "https://www.dsimb.inserm.fr/ATLAS/"
 BASE_API_URL = "https://www.dsimb.inserm.fr/ATLAS/api"
+PDB_LIST_URL = "https://www.dsimb.inserm.fr/ATLAS/data/download/distributions/2024_11_18_ATLAS_pdb.txt"
 ATLAS_METADATA = {
     "license": "CC-BY-NC",  # https://www.dsimb.inserm.fr/ATLAS/download.html
     "author_name": [  # https://academic.oup.com/nar/article/52/D1/D384/7438909
@@ -60,36 +61,6 @@ ATLAS_METADATA = {
     "simulation_time": "100 ns",  # https://www.dsimb.inserm.fr/ATLAS/api/MD_parameters
     "simulation_timestep": 2,  # https://www.dsimb.inserm.fr/ATLAS/api/MD_parameters
 }
-
-
-def extract_pdb_chains_from_html(
-    html: str, logger: "loguru.Logger" = loguru.logger
-) -> set[str]:
-    """Extract PDB chain identifiers from ATLAS index page.
-
-    Parameters
-    ----------
-    html : str
-        HTML content of the ATLAS index page.
-    logger : loguru.Logger
-        Logger for logging messages.
-
-    Returns
-    -------
-    set[str]
-        Set of PDB chain identifiers found.
-    """
-    pdb_chains = []
-    pdb_chain_pattern = re.compile(
-        r"/ATLAS/database/ATLAS/([A-Za-z0-9]{4}_[A-Za-z])/.*html"
-    )
-    soup = BeautifulSoup(html, "html.parser")
-    for link in soup.find_all("a", href=True):
-        href = link.get("href", "")
-        match = pdb_chain_pattern.search(href)
-        if match:
-            pdb_chains.append(match.group(1))
-    return set(pdb_chains)
 
 
 def extract_files_from_html(
@@ -251,19 +222,15 @@ def search_all_datasets(client: httpx.Client, logger: "loguru.Logger") -> set[st
     set[str]
         Set of PDB chains (datasets) found.
     """
-    logger.info("Fetching index page listing ATLAS datasets...")
+    logger.info("Listing available datasets ...")
     response = make_http_request_with_retries(
-        client, INDEX_URL, HttpMethod.GET, delay_before_request=0.5, logger=logger
+        client, PDB_LIST_URL, HttpMethod.GET, delay_before_request=0.5, logger=logger
     )
-    if not response:
+    if not response or not hasattr(response, "text") or not response.text:
         logger.critical("Failed to fetch index page.")
-        logger.critical("Cannot list available datasets. Aborting!")
+        logger.critical("Cannot determine number of datasets. Aborting!")
         sys.exit(1)
-    if not hasattr(response, "text") or not response.text:
-        logger.critical("Index page response is empty.")
-        logger.critical("Cannot list available datasets. Aborting!")
-        sys.exit(1)
-    chain_ids = extract_pdb_chains_from_html(response.text, logger=logger)
+    chain_ids = response.text.strip().splitlines()
     logger.info(f"Found {len(chain_ids)} datasets.")
     return chain_ids
 
@@ -395,6 +362,9 @@ def update_datasets_dates_from_files_metadata(
     updated_datasets_metadata = []
     logger.info("Updating datasets dates from files metadata...")
     for dataset_meta in datasets_metadata:
+        logger.info(
+            f"Updating metadata for dataset: {dataset_meta.dataset_id_in_repository}"
+        )
         dates = []
         number_of_files = 0
         for file_meta in files_metadata:
@@ -417,7 +387,15 @@ def update_datasets_dates_from_files_metadata(
             dataset_meta.date_last_updated = max(dates)
         if number_of_files > 0:
             dataset_meta.number_of_files = number_of_files
+        logger.info(f"Date created: {dataset_meta.date_created}")
+        logger.info(f"Date last updated: {dataset_meta.date_last_updated}")
+        logger.info(f"Number of files: {dataset_meta.number_of_files}")
         updated_datasets_metadata.append(dataset_meta)
+        logger.info(
+            "Updated metadata for "
+            f"{len(updated_datasets_metadata):,}/{len(datasets_metadata):,} "
+            f"({len(updated_datasets_metadata) / len(datasets_metadata):.0%}) datasets"
+        )
     return updated_datasets_metadata
 
 

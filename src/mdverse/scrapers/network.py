@@ -252,7 +252,7 @@ def get_last_modified_date_from_http_head_request(
     str | None
         Last modified date if available, None otherwise.
     """
-    logger.info("Retrieving last modified date from HTTP HEAD request")
+    logger.debug("Retrieving last modified date from HTTP HEAD request")
     response = make_http_request_with_retries(
         client,
         url,
@@ -270,7 +270,7 @@ def get_last_modified_date_from_http_head_request(
             else None
         )
         if last_modified:
-            logger.info(f"Last modified date: {last_modified}")
+            logger.debug(f"Last modified date: {last_modified}")
         else:
             logger.warning("Last modified date not available.")
     else:
@@ -305,9 +305,11 @@ def get_zip_file_content_from_http_request(
         logger.error(f"Cannot retrieve ZIP file: {e}")
         return file_list
     for file_item in zip_file.infoiter():
-        file_list.append(
-            {"file_name": file_item.filename, "file_size": file_item.file_size}
-        )
+        # Only consider files, not directories.
+        if not file_item.is_dir():
+            file_list.append(
+                {"file_name": file_item.filename, "file_size": file_item.file_size}
+            )
     logger.debug(f"Found {len(file_list)} files in the ZIP file.")
     return file_list
 
