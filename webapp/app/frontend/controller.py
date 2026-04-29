@@ -23,15 +23,12 @@ async def read_index(request: Request, session: SessionDep):
     datasets_stats_results, datasets_stats_total_count, home_page_banner_stats = (
         service.get_dataset_origin_summary(session)
     )
-
     # Create both Bokeh plots.
     files_plot = service.make_plot(session, target="files")
     datasets_plot = service.make_plot(session, target="datasets")
-
     # Get the script and div for each plot.
     files_plot_script, files_plot_div = components(files_plot)
     datasets_plot_script, datasets_plot_div = components(datasets_plot)
-
     # Pass it to the template
     return templates.TemplateResponse(
         request=request,
