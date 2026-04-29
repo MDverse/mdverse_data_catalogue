@@ -6,15 +6,19 @@ from enum import StrEnum
 from io import BytesIO
 
 import certifi
+import dateparser
 import httpx
 import loguru
 import pycurl
+import unzip_http
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
+
+from ..models.date import DATETIME_FORMAT
 
 
 class HttpMethod(StrEnum):
@@ -192,7 +196,7 @@ def make_http_request_with_retries(
     return None
 
 
-def retrieve_file_size_from_http_head_request(
+def get_file_size_from_http_head_request(
     client: httpx.Client, url: str, logger: "loguru.Logger" = loguru.logger
 ) -> int | None:
     """Retrieve file size from HTTP HEAD request.
@@ -227,6 +231,85 @@ def retrieve_file_size_from_http_head_request(
     else:
         logger.warning("Could not retrieve file size.")
     return size
+
+
+def get_last_modified_date_from_http_head_request(
+    client: httpx.Client, url: str, logger: "loguru.Logger" = loguru.logger
+) -> str | None:
+    """Retrieve the last modified date from HTTP HEAD request.
+
+    Parameters
+    ----------
+    client : httpx.Client
+        The HTTPX client to use for making requests.
+    url : str
+        The URL of the file.
+    logger : "loguru.Logger"
+        Logger for logging messages.
+
+    Returns
+    -------
+    str | None
+        Last modified date if available, None otherwise.
+    """
+    logger.info("Retrieving last modified date from HTTP HEAD request")
+    response = make_http_request_with_retries(
+        client,
+        url,
+        method=HttpMethod.HEAD,
+        timeout=30,
+        delay_before_request=0.2,
+        logger=logger,
+    )
+    last_modified = None
+    if response and response.headers:
+        last_modified_unformated = response.headers.get("Last-Modified")
+        last_modified = (
+            dateparser.parse(last_modified_unformated).strftime(DATETIME_FORMAT)
+            if last_modified_unformated
+            else None
+        )
+        if last_modified:
+            logger.info(f"Last modified date: {last_modified}")
+        else:
+            logger.warning("Last modified date not available.")
+    else:
+        logger.warning("Could not retrieve last modified date.")
+    return last_modified
+
+
+def get_zip_file_content_from_http_request(
+    url: str, logger: "loguru.Logger" = loguru.logger
+) -> list:
+    """Retrieve ZIP file content from HTTP request.
+
+    Parameters
+    ----------
+    url : str
+        The URL of the ZIP file.
+    logger : "loguru.Logger"
+        Logger for logging messages.
+
+    Returns
+    -------
+    list
+        Content of the ZIP file if successful, empty list otherwise.
+    """
+    file_list = []
+    logger.info("Retrieving zip file content of:")
+    logger.info(url)
+    zip_file = unzip_http.RemoteZipFile(url)
+    try:
+        zip_file.namelist()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Cannot retrieve ZIP file: {e}")
+        return file_list
+    for file_item in zip_file.infoiter():
+        file_list.append(
+            {"file_name": file_item.filename, "file_size": file_item.file_size}
+        )
+    logger.debug(f"Found {len(file_list)} files in the ZIP file.")
+    return file_list
 
 
 def parse_response_headers(headers_bytes: bytes) -> dict[str, str]:
