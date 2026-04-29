@@ -40,12 +40,13 @@ extend-select = [
     "W",    # Pycodestyle warnings
 ]
 ignore = [
-    "COM812", # Redundant with ruff formatter. See: https://docs.astral.sh/ruff/rules/missing-trailing-comma/
-    "G004",   # f-strings are allowed with the loguru module. See https://docs.astral.sh/ruff/rules/logging-f-string/
-    "PLR",    # No Pylint recommendations
-    "DTZ005", # `datetime.datetime.now()` called without a `tz` argument
-    "DTZ001", # `datetime.datetime()` called without a `tzinfo` argument
-    "RET504", # Unnecessary assignment to `datasets_agg` before `return` statement
+    "COM812",  # Redundant with ruff formatter. See: https://docs.astral.sh/ruff/rules/missing-trailing-comma/
+    "G004",    # f-strings are allowed with the loguru module. See https://docs.astral.sh/ruff/rules/logging-f-string/
+    "PLR",     # No Pylint recommendations
+    "DTZ005",  # `datetime.datetime.now()` called without a `tz` argument
+    "DTZ001",  # `datetime.datetime()` called without a `tzinfo` argument
+    "RET504",  # Unnecessary assignment to `datasets_agg` before `return` statement
+    "PERF401", # Use .extend() instead of .append()
 ]
 
 # Force numpy-style for docstrings

@@ -27,9 +27,9 @@ from mdverse.models.utils import (
 from .network import (
     HttpMethod,
     create_httpx_client,
+    get_file_size_from_http_head_request,
     is_connection_to_server_working,
     make_http_request_with_retries,
-    retrieve_file_size_from_http_head_request,
 )
 from .toolbox import print_statistics
 
@@ -327,7 +327,7 @@ def scrape_files_metadata_for_one_dataset(
         metadata["file_name"] = Path(metadata["file_url_in_repository"]).name
         # Fetch the file size using a HEAD request.
         # We do not download the entire file.
-        metadata["file_size_in_bytes"] = retrieve_file_size_from_http_head_request(
+        metadata["file_size_in_bytes"] = get_file_size_from_http_head_request(
             client, metadata["file_url_in_repository"], logger=logger
         )
         files_metadata.append(metadata)

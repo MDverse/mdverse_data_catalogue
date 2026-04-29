@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
+from mdverse.models.file import FileMetadata
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.simulation import (
     ExternalIdentifier,
@@ -29,6 +30,9 @@ from mdverse.models.utils import (
 from .network import (
     HttpMethod,
     create_httpx_client,
+    get_file_size_from_http_head_request,
+    get_last_modified_date_from_http_head_request,
+    get_zip_file_content_from_http_request,
     is_connection_to_server_working,
     make_http_request_with_retries,
 )
@@ -88,7 +92,7 @@ def extract_pdb_chains_from_html(
     return set(pdb_chains)
 
 
-def extract_file_sizes_from_html(
+def extract_files_from_html(
     html: str, logger: "loguru.Logger" = loguru.logger
 ) -> list[dict]:
     """Extract file sizes from ATLAS dataset HTML page.
@@ -110,23 +114,24 @@ def extract_file_sizes_from_html(
     download_link_pattern = re.compile(
         r"https://www.dsimb.inserm.fr/ATLAS/database/ATLAS/[A-Za-z0-9]{4}_[A-Za-z]/.*zip"
     )
-    file_size_pattern = re.compile(r"Download \(([A-Za-z0-9,\. ]+)\)")
     soup = BeautifulSoup(html, "html.parser")
     for link in soup.find_all("a", href=True):
         href = link.get("href", "")
+        # Get links to zip files.
         match_link = download_link_pattern.search(href)
-        match_size = file_size_pattern.search(link.text)
-        if match_link and match_size:
+        if match_link:
+            # Get file size.
+            size = get_file_size_from_http_head_request(
+                create_httpx_client(), href, logger=logger
+            )
             files_metadata.append(
                 {
                     "file_name": Path(href).name,
                     "file_url_in_repository": href,
-                    # File sizes are sometimes expressed with comma
-                    # as decimal separator.
-                    "file_size_in_bytes": match_size.group(1).replace(",", "."),
+                    "file_size_in_bytes": size,
                 }
             )
-    logger.info(f"Found {len(files_metadata)} files in the HTML page.")
+    logger.info(f"Found {len(files_metadata)} files.")
     return files_metadata
 
 
@@ -325,7 +330,7 @@ def scrape_all_files(
         if not response:
             logger.warning(f"Failed to fetch HTML page for {pdb_chain}. Skipping.")
             continue
-        files_meta = extract_file_sizes_from_html(response.text, logger=logger)
+        files_meta = extract_files_from_html(response.text, logger=logger)
         for meta in files_meta:
             metadata = {
                 "dataset_repository_name": dataset_meta.dataset_repository_name,
@@ -336,6 +341,23 @@ def scrape_all_files(
                 "file_size_in_bytes": meta["file_size_in_bytes"],
             }
             files_metadata.append(metadata)
+        # Select zip files.
+        zip_files = [meta for meta in files_meta if meta["file_name"].endswith(".zip")]
+        # Add content of the ZIP file.
+        for zip_file in zip_files:
+            zip_url = zip_file["file_url_in_repository"]
+            zip_content = get_zip_file_content_from_http_request(zip_url, logger=logger)
+            for file_item in zip_content:
+                metadata = {
+                    "dataset_repository_name": dataset_meta.dataset_repository_name,
+                    "dataset_id_in_repository": dataset_meta.dataset_id_in_repository,
+                    "dataset_url_in_repository": dataset_meta.dataset_url_in_repository,
+                    "file_url_in_repository": zip_file["file_url_in_repository"],
+                    "containing_archive_file_name": zip_file["file_name"],
+                    "file_name": file_item["file_name"],
+                    "file_size_in_bytes": file_item["file_size"],
+                }
+                files_metadata.append(metadata)
         logger.info(
             "Scraped metadata files for "
             f"{dataset_counter:,}/{len(datasets_metadata):,} "
@@ -343,6 +365,60 @@ def scrape_all_files(
         )
         logger.info(f"Total files scraped so far: {len(files_metadata):,}")
     return files_metadata
+
+
+def update_datasets_dates_from_files_metadata(
+    client: httpx.Client,
+    datasets_metadata: list[DatasetMetadata],
+    files_metadata: list[FileMetadata],
+    logger: "loguru.Logger",
+) -> list[DatasetMetadata]:
+    """Update datasets metadata based on files metadata.
+
+    Update the date_created and date_last_modified fields of each dataset
+    based on the last modified dates of its zip files.
+
+    Parameters
+    ----------
+    datasets_metadata : list[DatasetMetadata]
+        List of datasets metadata.
+    files_metadata : list[FileMetadata]
+        List of files metadata.
+    logger : loguru.Logger
+        Logger for logging messages.
+
+    Returns
+    -------
+    list[DatasetMetadata]
+        Updated list of datasets metadata.
+    """
+    updated_datasets_metadata = []
+    logger.info("Updating datasets dates from files metadata...")
+    for dataset_meta in datasets_metadata:
+        dates = []
+        number_of_files = 0
+        for file_meta in files_metadata:
+            if (
+                file_meta.dataset_id_in_repository
+                == dataset_meta.dataset_id_in_repository
+                and file_meta.file_type == "zip"
+            ):
+                last_modified = get_last_modified_date_from_http_head_request(
+                    client, file_meta.file_url_in_repository, logger=logger
+                )
+                dates.append(last_modified)
+            if (
+                file_meta.dataset_id_in_repository
+                == dataset_meta.dataset_id_in_repository
+            ):
+                number_of_files += 1
+        if dates:
+            dataset_meta.date_created = min(dates)
+            dataset_meta.date_last_updated = max(dates)
+        if number_of_files > 0:
+            dataset_meta.number_of_files = number_of_files
+        updated_datasets_metadata.append(dataset_meta)
+    return updated_datasets_metadata
 
 
 @click.command(
@@ -415,6 +491,11 @@ def main(output_dir_path: Path, *, is_in_debug_mode: bool = False) -> None:
     files_metadata_normalized = normalize_files_metadata(
         files_metadata,
         logger=logger,
+    )
+    # Update date_created and date_last_modified fields in datasets
+    # based on zip files modification dates.
+    datasets_metadata_normalized = update_datasets_dates_from_files_metadata(
+        client, datasets_metadata_normalized, files_metadata_normalized, logger=logger
     )
     # Save datasets metadata to parquet file.
     scraper.number_of_datasets_scraped = export_list_of_models_to_parquet(
