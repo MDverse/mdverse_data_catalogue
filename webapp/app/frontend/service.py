@@ -91,7 +91,7 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
             )
         ),
     }
-    # Format date
+    # Format date.
     for item in ["first_dataset", "last_dataset"]:
         if datasets_stats_total_count[item]:
             datasets_stats_total_count[item] = datasets_stats_total_count[item].split(
@@ -119,6 +119,10 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
     statement_sources = select(func.count()).select_from(DataSource)
     result_sources = session.exec(statement_sources).first()
 
+    last_update = datetime.strptime(
+        datasets_stats_total_count["last_dataset"], "%Y-%m-%d"
+    )
+
     home_page_banner_stats = {
         "total_topology_files": "{:,}".format(results_topologies)
         if results_topologies
@@ -127,9 +131,14 @@ def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, s
         if results_trajectories
         else "0",
         "total_data_sources": "{:,}".format(result_sources) if result_sources else "0",
+        "last_update": f"{last_update:%B %Y}" if last_update else "N/A",
     }
-
     return datasets_stats_results, datasets_stats_total_count, home_page_banner_stats
+
+
+def extract_data_repository_names(session: Session):
+    statement = select(DataSource.name).distinct()
+    return session.exec(statement).all()
 
 
 def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
@@ -148,91 +157,6 @@ def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
-def extract_data_repository_names(session: Session):
-    statement = select(DataSource.name).distinct()
-    return session.exec(statement).all()
-
-
-def create_files_plot(session: Session):
-    """Create a line plot with cumulative number of datasets per year.
-
-    One line per data repository.
-
-    Doc:
-    - https://docs.bokeh.org/en/latest/docs/user_guide/interaction/tools.html#ug-interaction-tools-hover-tool
-    - https://docs.bokeh.org/en/latest/docs/user_guide/interaction/legends.html
-    """
-    repository_names = extract_data_repository_names(session)
-    all_years = list(range(2012, datetime.now().year + 1))
-
-    data = {
-        "year": [str(year) for year in all_years],
-    }
-    for repository in repository_names:
-        stats = get_files_yearly_counts_for_origin(session, repository)
-        counts = np.array([stats.get(year, 0) for year in all_years])
-        data[repository] = np.cumsum(counts)
-
-    source = ColumnDataSource(data=data)
-
-    plot = figure(
-        x_range=data["year"],
-        y_axis_type="log",
-        height=600,
-        width=1000,
-        title="Cumulative number of files by year and data repository",
-        tooltips=[
-            ("Year", "@year"),
-            ("Data repository", "$name"),
-            ("Number of files", "$snap_y{0,0}"),
-        ],
-        tools="hover,box_zoom,reset,save",
-        background_fill_color="#fafafa",
-    )
-
-    for repository in repository_names:
-        plot.line(
-            x="year",
-            y=repository,
-            width=3,
-            source=source,
-            color=COLORS[repository],
-            legend_label=repository,
-            name=repository,
-        )
-        plot.scatter(
-            x="year",
-            y=repository,
-            size=8,
-            width=3,
-            source=source,
-            fill_color="white",
-            color=COLORS[repository],
-            legend_label=repository,
-            name=repository,
-        )
-
-    plot.toolbar.active_drag = None
-
-    plot.xaxis.axis_label = "Year"
-    plot.yaxis.axis_label = "Number of files"
-    plot.yaxis.formatter = NumeralTickFormatter(format="0,0")
-
-    plot.title.text_font_size = "14pt"
-    plot.xaxis.axis_label_text_font_size = "12pt"
-    plot.yaxis.axis_label_text_font_size = "12pt"
-    plot.xaxis.major_label_text_font_size = "10pt"
-    plot.yaxis.major_label_text_font_size = "10pt"
-
-    plot.legend.location = "top_left"
-    plot.legend.background_fill_alpha = 0.3
-    plot.legend.border_line_color = None
-    plot.legend.label_text_font_size = "10pt"
-    plot.legend.click_policy = "hide"
-
-    return plot
-
-
 # Similarly, create a plot for datasets per year.
 def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
     statement = (
@@ -249,8 +173,8 @@ def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
-def create_datasets_plot(session: Session):
-    """Create a line plot with cumulative number of datasets per year.
+def make_plot(session: Session, target: str = "datasets"):
+    """Create a line plot with cumulative number of files or datasets per year.
 
     One line per data repository.
 
@@ -265,7 +189,10 @@ def create_datasets_plot(session: Session):
         "year": [str(year) for year in all_years],
     }
     for repository in repository_names:
-        stats = get_dataset_yearly_counts_for_origin(session, repository)
+        if target == "files":
+            stats = get_files_yearly_counts_for_origin(session, repository)
+        elif target == "datasets":
+            stats = get_dataset_yearly_counts_for_origin(session, repository)
         counts = np.array([stats.get(year, 0) for year in all_years])
         data[repository] = np.cumsum(counts)
 
@@ -276,11 +203,11 @@ def create_datasets_plot(session: Session):
         y_axis_type="log",
         height=600,
         width=1000,
-        title="Cumulative number of datasets by year and data repository",
+        title=f"Cumulative number of {target} by year and data repository",
         tooltips=[
             ("Year", "@year"),
             ("Data repository", "$name"),
-            ("Number of datasets", "$snap_y{0,0}"),
+            (f"Number of {target}", "$snap_y{0,0}"),
         ],
         tools="hover,box_zoom,reset,save",
         background_fill_color="#fafafa",
@@ -311,7 +238,7 @@ def create_datasets_plot(session: Session):
     plot.toolbar.active_drag = None
 
     plot.xaxis.axis_label = "Year"
-    plot.yaxis.axis_label = "Number of datasets"
+    plot.yaxis.axis_label = f"Number of {target} (log)"
     plot.yaxis.formatter = NumeralTickFormatter(format="0,0")
 
     plot.title.text_font_size = "14pt"
