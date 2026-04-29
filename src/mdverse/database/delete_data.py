@@ -1,19 +1,22 @@
 """
 Purpose:
-    This script removes data from the database in two modes:
+    Remove data from the database in two modes:
 
-    1. DATASET mode  — removes a single dataset identified by its repository
-                       name and its ID within that repository.
-    2. SOURCE mode   — removes ALL datasets (and every related record) that
-                       belong to a given data source (e.g. "zenodo").
+    1. DATASET mode — removes a single dataset identified by its repository
+                      name (--datarepo) and its ID within that repository
+                      (--dataset).
+    2. SOURCE  mode — removes ALL datasets (and every related record) that
+                      belong to a given data source; omit --dataset to
+                      trigger this mode.
 
 How it works:
     Deletions always cascade from the deepest child tables up to the parent,
     respecting foreign-key constraints:
 
-        TopologyFile  ─┐
-        ParameterFile  ├─► File ──► Dataset ──► DataSource (source mode only)
-        TrajectoryFile ─┘
+        TopologyFile    ─┐
+        ParameterFile   ├─► File ──┐
+        TrajectoryFile  ─┘         ├─► Dataset ──► DataSource (source mode only)
+        DatasetAuthorLink ─────────┘
 
     All deletions for a single run happen inside ONE transaction. If anything
     fails the entire transaction is rolled back automatically, so the database
@@ -25,17 +28,13 @@ Performance:
     statement — no Python loop, no per-row round-trips.
 
 Usage:
-    # Delete one dataset (repo name + its ID inside that repo)
-    uv run delete_data.py --dataset zenodo 1234567
+    # Delete an entire data source (always dry-run first)
+    uv run delete_data.py --datarepo zenodo --dry-run
+    uv run delete_data.py --datarepo zenodo
 
-    # Delete ALL datasets from an entire repository
-    # WARNING: irreversible — always dry-run first.
-    uv run delete_data.py --source zenodo
-
-    # Dry-run: prints what WOULD be deleted without touching the database
-    # Always do this first to verify before a real deletion.
-    uv run delete_data.py --dataset zenodo 1234567 --dry-run
-    uv run delete_data.py --source zenodo --dry-run
+    # Delete a single dataset within a source (always dry-run first)
+    uv run delete_data.py --datarepo zenodo --dataset 1234567 --dry-run
+    uv run delete_data.py --datarepo zenodo --dataset 1234567
 """
 
 import sys
@@ -52,6 +51,7 @@ from db_schema import (
     engine,
     Dataset,
     DataSource,
+    DatasetAuthorLink,
     File,
     TopologyFile,
     ParameterFile,
@@ -60,7 +60,7 @@ from db_schema import (
 
 
 # ============================================================================
-# Logger  (same style as ingest_data.py)
+# Logger
 # ============================================================================
 
 logger.remove()
@@ -91,8 +91,7 @@ def _chunked(ids: list[int], size: int = SQLITE_MAX_VARS):
 
 
 def _count_rows(session: Session, Model, id_column, ids: list[int]) -> int:
-    """Return the number of rows in Model where id_column is in ids.
-    Splits into chunks to respect SQLite's variable limit."""
+    """Count rows in Model where id_column is in ids (chunked for SQLite)."""
     if not ids:
         return 0
     total = 0
@@ -103,33 +102,34 @@ def _count_rows(session: Session, Model, id_column, ids: list[int]) -> int:
     return total
 
 
-def _chunked_delete(session, Model, id_column, ids: list[int]) -> int:
-    """Bulk-delete rows where id_column is in ids, chunked for SQLite.
-    Returns the total number of deleted rows."""
+def _chunked_delete(session: Session, Model, id_column, ids: list[int]) -> int:
+    """Bulk-delete rows where id_column is in ids (chunked for SQLite).
+    Returns total number of deleted rows."""
     if not ids:
         return 0
     total = 0
     for chunk in _chunked(ids):
-        r = session.exec(delete(Model).where(id_column.in_(chunk)))
-        total += r.rowcount
+        result = session.exec(delete(Model).where(id_column.in_(chunk)))
+        total += result.rowcount
     return total
 
 
 def _delete_by_dataset_ids(session: Session, dataset_ids: list[int], dry_run: bool) -> dict:
     """
-    Delete every record that belongs to the given dataset PKs.
+    Delete (or count) every record that belongs to the given dataset PKs.
 
     Deletion order (child → parent):
-        TopologyFile / ParameterFile / TrajectoryFile → File → Dataset
+        TopologyFile / ParameterFile / TrajectoryFile
+            → DatasetAuthorLink (datasets_authors_link)
+            → File
+            → Dataset
 
-    All IN (...) clauses are chunked to stay within SQLite's 999-variable limit.
-    Returns a dict with the row counts that were (or would be) deleted.
+    Returns a dict with row counts per table.
     """
     if not dataset_ids:
         return {}
 
-    # ── Collect the file PKs that belong to these datasets ────────────────
-    # Chunked to respect SQLite's variable limit.
+    # Collect file PKs for these datasets (chunked for SQLite)
     file_ids: list[int] = []
     for chunk in _chunked(dataset_ids):
         file_ids.extend(
@@ -138,25 +138,24 @@ def _delete_by_dataset_ids(session: Session, dataset_ids: list[int], dry_run: bo
             ).all()
         )
 
-    counts = {}
-
     if dry_run:
-        # In dry-run mode we only COUNT, never DELETE.
-        counts["TopologyFile"]   = _count_rows(session, TopologyFile,   TopologyFile.file_id,   file_ids)
-        counts["ParameterFile"]  = _count_rows(session, ParameterFile,  ParameterFile.file_id,  file_ids)
-        counts["TrajectoryFile"] = _count_rows(session, TrajectoryFile, TrajectoryFile.file_id, file_ids)
-        counts["File"]           = len(file_ids)
-        counts["Dataset"]        = len(dataset_ids)
-        return counts
+        return {
+            "TopologyFile":          _count_rows(session, TopologyFile,      TopologyFile.file_id,        file_ids),
+            "ParameterFile":         _count_rows(session, ParameterFile,     ParameterFile.file_id,       file_ids),
+            "TrajectoryFile":        _count_rows(session, TrajectoryFile,    TrajectoryFile.file_id,      file_ids),
+            "DatasetAuthorLink":     _count_rows(session, DatasetAuthorLink, DatasetAuthorLink.dataset_id, dataset_ids),
+            "File":                  len(file_ids),
+            "Dataset":               len(dataset_ids),
+        }
 
-    # ── Real deletions — deepest child tables first ────────────────────────
-    counts["TopologyFile"]   = _chunked_delete(session, TopologyFile,   TopologyFile.file_id,   file_ids)
-    counts["ParameterFile"]  = _chunked_delete(session, ParameterFile,  ParameterFile.file_id,  file_ids)
-    counts["TrajectoryFile"] = _chunked_delete(session, TrajectoryFile, TrajectoryFile.file_id, file_ids)
-    counts["File"]           = _chunked_delete(session, File,           File.dataset_id,         dataset_ids)
-    counts["Dataset"]        = _chunked_delete(session, Dataset,        Dataset.dataset_id,      dataset_ids)
-
-    return counts
+    return {
+        "TopologyFile":          _chunked_delete(session, TopologyFile,      TopologyFile.file_id,        file_ids),
+        "ParameterFile":         _chunked_delete(session, ParameterFile,     ParameterFile.file_id,       file_ids),
+        "TrajectoryFile":        _chunked_delete(session, TrajectoryFile,    TrajectoryFile.file_id,      file_ids),
+        "DatasetAuthorLink":     _chunked_delete(session, DatasetAuthorLink, DatasetAuthorLink.dataset_id, dataset_ids),
+        "File":                  _chunked_delete(session, File,              File.dataset_id,              dataset_ids),
+        "Dataset":               _chunked_delete(session, Dataset,           Dataset.dataset_id,           dataset_ids),
+    }
 
 
 def _log_counts(counts: dict, dry_run: bool) -> None:
@@ -172,38 +171,27 @@ def _log_counts(counts: dict, dry_run: bool) -> None:
 
 def delete_dataset(source_name: str, id_in_source: str, dry_run: bool = False) -> None:
     """
-    Remove a single dataset — identified by its repository name and the ID it
-    has inside that repository — together with all its files and simulation
-    records.
-
-    Args:
-        source_name:   Repository name as stored in the DB, e.g. "zenodo".
-        id_in_source:  The dataset's ID within that repository, e.g. "1234567".
-        dry_run:       If True, only print what would be deleted.
+    Remove a single dataset — identified by --datarepo and --dataset — together
+    with all its files and simulation records.
     """
-    logger.info(f"Mode: DELETE DATASET  |  source='{source_name}'  id='{id_in_source}'")
+    logger.info(f"Mode: DELETE DATASET  |  datarepo='{source_name}'  dataset='{id_in_source}'")
     if dry_run:
         logger.warning("DRY-RUN enabled — no changes will be written to the database.")
 
     with Session(engine) as session:
-
-        # 1. Resolve the DataSource row
         source = session.exec(
             select(DataSource).where(DataSource.name == source_name)
         ).first()
-
         if not source:
             logger.error(f"Data source '{source_name}' not found in the database.")
             sys.exit(1)
 
-        # 2. Resolve the Dataset row
         dataset = session.exec(
             select(Dataset).where(
                 Dataset.data_source_id == source.data_source_id,
                 Dataset.id_in_data_source == id_in_source,
             )
         ).first()
-
         if not dataset:
             logger.error(
                 f"Dataset '{id_in_source}' from '{source_name}' not found in the database."
@@ -212,43 +200,34 @@ def delete_dataset(source_name: str, id_in_source: str, dry_run: bool = False) -
 
         logger.info(f"Found dataset PK={dataset.dataset_id}  title='{dataset.title}'")
 
-        # 3. Delete everything (or simulate it)
         counts = _delete_by_dataset_ids(session, [dataset.dataset_id], dry_run)
 
-        if not dry_run:
+        if dry_run:
+            session.rollback()
+        else:
             session.commit()
             logger.success("Transaction committed.")
-        else:
-            session.rollback()
 
     _log_counts(counts, dry_run)
 
 
 def delete_source(source_name: str, dry_run: bool = False) -> None:
     """
-    Remove ALL datasets belonging to a data source, then remove the
-    DataSource record itself.
-
-    Args:
-        source_name:  Repository name as stored in the DB, e.g. "zenodo".
-        dry_run:      If True, only print what would be deleted.
+    Remove ALL datasets belonging to a data source, then the DataSource row
+    itself.
     """
-    logger.info(f"Mode: DELETE SOURCE  |  source='{source_name}'")
+    logger.info(f"Mode: DELETE SOURCE  |  datarepo='{source_name}'")
     if dry_run:
         logger.warning("DRY-RUN enabled — no changes will be written to the database.")
 
     with Session(engine) as session:
-
-        # 1. Resolve the DataSource row
         source = session.exec(
             select(DataSource).where(DataSource.name == source_name)
         ).first()
-
         if not source:
             logger.error(f"Data source '{source_name}' not found in the database.")
             sys.exit(1)
 
-        # 2. Collect all dataset PKs for this source
         dataset_ids: list[int] = list(
             session.exec(
                 select(Dataset.dataset_id).where(
@@ -256,10 +235,9 @@ def delete_source(source_name: str, dry_run: bool = False) -> None:
                 )
             ).all()
         )
-
         logger.info(f"Found {len(dataset_ids):,} dataset(s) under '{source_name}'.")
 
-        # ── Confirmation prompt for destructive source-level deletion ─────
+        # Confirmation prompt — before any writes
         if not dry_run:
             answer = input(
                 f"\n  WARNING: This will permanently delete ALL {len(dataset_ids):,} datasets "
@@ -270,20 +248,20 @@ def delete_source(source_name: str, dry_run: bool = False) -> None:
                 logger.warning("Confirmation did not match. Aborting — nothing was deleted.")
                 sys.exit(0)
 
-        # 3. Delete all child records + datasets
         counts = _delete_by_dataset_ids(session, dataset_ids, dry_run)
 
-        # 4. Also delete the DataSource row itself
-        if not dry_run:
+        if dry_run:
+            counts["DataSource"] = 1
+            session.rollback()
+        else:
             session.exec(
-                delete(DataSource).where(DataSource.data_source_id == source.data_source_id)
+                delete(DataSource).where(
+                    DataSource.data_source_id == source.data_source_id
+                )
             )
             counts["DataSource"] = 1
             session.commit()
             logger.success("Transaction committed.")
-        else:
-            counts["DataSource"] = 1  # Would delete 1 DataSource row
-            session.rollback()
 
     _log_counts(counts, dry_run)
 
@@ -298,45 +276,41 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Delete one dataset
-  uv run delete_data.py --dataset zenodo 1234567
+  # Delete an entire data source (always dry-run first)
+  uv run delete_data.py --datarepo zenodo --dry-run
+  uv run delete_data.py --datarepo zenodo
 
-  # Delete all datasets from a source
-  uv run delete_data.py --source zenodo
-
-  # Dry-run (safe preview — nothing is deleted)
-  uv run delete_data.py --dataset zenodo 1234567 --dry-run
-  uv run delete_data.py --source zenodo --dry-run
+  # Delete a single dataset within a source (always dry-run first)
+  uv run delete_data.py --datarepo zenodo --dataset 1234567 --dry-run
+  uv run delete_data.py --datarepo zenodo --dataset 1234567
         """,
     )
-
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "--dataset",
-        nargs=2,
-        metavar=("SOURCE_NAME", "ID_IN_SOURCE"),
-        help="Delete a single dataset. Provide the repo name then its ID.",
-    )
-    mode.add_argument(
-        "--source",
+    parser.add_argument(
+        "--datarepo",
+        required=True,
         metavar="SOURCE_NAME",
-        help="Delete ALL datasets from an entire data source.",
+        help="Repository name to target (e.g. zenodo, atlas, nomad).",
     )
-
+    parser.add_argument(
+        "--dataset",
+        metavar="ID_IN_SOURCE",
+        default=None,
+        help="ID of a single dataset within the repository. "
+             "Omit to delete ALL datasets in --datarepo.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print what would be deleted without making any changes.",
+        help="Preview what would be deleted without making any changes.",
     )
 
     args = parser.parse_args()
     start = time.perf_counter()
 
     if args.dataset:
-        source_name, id_in_source = args.dataset
-        delete_dataset(source_name, id_in_source, dry_run=args.dry_run)
+        delete_dataset(args.datarepo, args.dataset, dry_run=args.dry_run)
     else:
-        delete_source(args.source, dry_run=args.dry_run)
+        delete_source(args.datarepo, dry_run=args.dry_run)
 
     elapsed = str(timedelta(seconds=time.perf_counter() - start)).split(".")[0]
     logger.info(f"Total time: {elapsed}")
