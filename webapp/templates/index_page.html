@@ -20,38 +20,46 @@
             MDverse is a data catalogue that indexes and annotates molecular dynamics (MD) simulations. See <a href="/about">about</a> for more information.
         </p>
     </div>
-    <nav class="level py-4 has-background-white-bis">
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="subtitle">Datasets</p>
-                <p class="title">{{ total_count.number_of_datasets }}</p>
+
+    <div class="card">
+        <div class="card-content">
+            <div class="content">
+                <div class="level py-4 has-background-white-bis">
+                    <div class="level-item has-text-centered">
+                        <div>
+                            <p class="subtitle">Datasets</p>
+                            <p class="title">{{ total_count.number_of_datasets }}</p>
+                        </div>
+                    </div>
+                    <div class="level-item has-text-centered">
+                        <div>
+                            <p class="subtitle">Files</p>
+                            <p class="title">{{ total_count.total_files }}</p>
+                        </div>
+                    </div>
+                    <div class="level-item has-text-centered">
+                        <div>
+                            <p class="subtitle">Structures</p>
+                            <p class="title">{{ banner_stats.total_topology_files }}</p>
+                        </div>
+                    </div>
+                    <div class="level-item has-text-centered">
+                        <div>
+                            <p class="subtitle">Trajectories</p>
+                            <p class="title">{{ banner_stats.total_trajectory_files }}</p>
+                        </div>
+                    </div>
+                    <div class="level-item has-text-centered">
+                        <div>
+                            <p class="subtitle">Data sources</p>
+                            <p class="title">{{ banner_stats.total_data_sources }}</p>
+                        </div>
+                    </div>
+                </div>
+                <p class="has-text-right">As of {{ banner_stats.last_update }}</p>
             </div>
         </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="subtitle">Files</p>
-                <p class="title">{{ total_count.total_files }}</p>
-            </div>
-        </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="subtitle">Structures</p>
-                <p class="title">{{ banner_stats.total_topology_files }}</p>
-            </div>
-        </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="subtitle">Trajectories</p>
-                <p class="title">{{ banner_stats.total_trajectory_files }}</p>
-            </div>
-        </div>
-        <div class="level-item has-text-centered">
-            <div>
-                <p class="subtitle">Data sources</p>
-                <p class="title">{{ banner_stats.total_data_sources }}</p>
-            </div>
-        </div>
-    </nav>
+    </div>
 
     <div class="card">
         <div class="card-content">
@@ -98,11 +106,9 @@
             <div class="content">
                 <!-- Plot container using Flexbox to center child elements -->
                 <div class="plot-section" style="display: flex; flex-direction: column; align-items: center; margin-top: 20px;">
-                    <!-- By default, show the files plot -->
                     <div id="filesPlot" style="width: 1000px;">
                         {{ files_plot_div | safe }}
                     </div>
-                    <!-- The datasets plot is hidden by default -->
                     <div id="datasetsPlot" style="width: 1000px;">
                         {{ datasets_plot_div | safe }}
                     </div>

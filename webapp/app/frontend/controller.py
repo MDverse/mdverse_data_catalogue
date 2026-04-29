@@ -25,8 +25,8 @@ async def read_index(request: Request, session: SessionDep):
     )
 
     # Create both Bokeh plots.
-    files_plot = service.create_files_plot(session)
-    datasets_plot = service.create_datasets_plot(session)
+    files_plot = service.make_plot(session, target="files")
+    datasets_plot = service.make_plot(session, target="datasets")
 
     # Get the script and div for each plot.
     files_plot_script, files_plot_div = components(files_plot)
