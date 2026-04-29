@@ -5,12 +5,12 @@ services:
     image: mdverse/webapp
     restart: unless-stopped
     # Open the FastAPI application on port 8080 on the host
-    # port 8000 in the Docker container
+    # and on port 8000 in the Docker container
     ports:
       - "8080:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       start_period: 20s
-      interval: 30s
+      interval: 60s
       timeout: 15s
       retries: 3

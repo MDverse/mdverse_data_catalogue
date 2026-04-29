@@ -1,0 +1,8 @@
+# Cache and build artifacts
+**/__pycache__/
+**/.ruff_cache/
+dist/
+build/
+
+# Secrets
+**/*.env
