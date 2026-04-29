@@ -15,5 +15,11 @@ The app should be available at the following URL:
 ## Run the web app in production mode
 
 ```bash
-uv run uvicorn webapp.app.main:app --reload
+uv run uvicorn webapp.app.main:app
+```
+
+## Run the web app in production with Docker
+
+```bash
+docker compose up -d
 ```
