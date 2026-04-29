@@ -83,7 +83,7 @@
             <tr>
                 <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;">{{ file.name }}</td>
                 <td>{{ file.file_type.name }}</td>
-                <td class="has-text-left">{{ "{:,.0f}".format(file.size_in_bytes) }}</td>
+                <td class="has-text-left">{{ "{:,.0f}".format(file.size_in_bytes) if file.size_in_bytes else "N/A" }}</td>
                 <td><a href="{{ file.url }}" target="_blank">🌐</a></td>
                 <td>{{ file.is_from_zip_file }}</td>
             </tr>
