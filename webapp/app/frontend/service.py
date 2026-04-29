@@ -1,10 +1,9 @@
 from datetime import datetime
 
+import cachetools
 import numpy as np
 from bokeh.models import ColumnDataSource, NumeralTickFormatter
 from bokeh.plotting import figure
-from cachetools import cached
-from cachetools.keys import hashkey
 from mdverse.database.database import (
     Dataset,
     DataSource,
@@ -29,10 +28,10 @@ COLORS = {
 # ============================================================================
 # Queries for index.html
 # ============================================================================
-@cached(
+@cachetools.cached(
     cache={},
     # Hash the session's engine URL and not the session itself that is not hashable.
-    key=lambda session: hashkey(session.get_bind().engine.url),
+    key=lambda session: cachetools.keys.hashkey(session.get_bind().engine.url),
 )
 def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, str]]:
     """
@@ -147,10 +146,10 @@ def extract_data_repository_names(session: Session):
     return session.exec(statement).all()
 
 
-@cached(
+@cachetools.cached(
     cache={},
     # Hash the session's engine URL and not the session itself that is not hashable.
-    key=lambda session, origin_name: hashkey(
+    key=lambda session, origin_name: cachetools.keys.hashkey(
         session.get_bind().engine.url, origin_name
     ),
 )
@@ -170,10 +169,10 @@ def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
-@cached(
+@cachetools.cached(
     cache={},
     # Hash the session's engine URL and not the session itself that is not hashable.
-    key=lambda session, origin_name: hashkey(
+    key=lambda session, origin_name: cachetools.keys.hashkey(
         session.get_bind().engine.url, origin_name
     ),
 )
