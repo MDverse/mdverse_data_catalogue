@@ -15,8 +15,8 @@ from sqlmodel import Session, select
 
 COLORS = {
     "atlas": "#EB5757",
-    "figshare": "#F2C80F",
-    "gpcrmd": "#D64550",
+    "figshare": "#00FF00",
+    "gpcrmd": "#F2C80F",
     "mdposit_cineca_node": "#46B3F3",
     "mdposit_inria_node": "#008CEE",
     "mdposit_mmb_node": "#0641C8",
