@@ -1,4 +1,5 @@
-"""
+"""Ingest data from parquet files into the database.
+
 Purpose:
     This script transforms data from parquet files into SQLModel objects
     and ingests them into the database. It handles two pipelines:
@@ -38,17 +39,16 @@ Usage:
 
 import sys
 import time
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 
 import pandas as pd
 from loguru import logger
 from sqlalchemy import Engine
-from sqlmodel import Session, select, delete, SQLModel
+from sqlmodel import Session, SQLModel, delete, select
 from tqdm import tqdm
 
-from db_schema import (
-    engine,
+from mdverse.database.database import (
     Author,
     Dataset,
     DataSource,
@@ -57,8 +57,8 @@ from db_schema import (
     ParameterFile,
     TopologyFile,
     TrajectoryFile,
+    load,
 )
-
 
 # ============================================================================
 # Logger
@@ -84,19 +84,61 @@ BATCH_SIZE = 500  # Number of rows committed per transaction
 # Helpers
 # ============================================================================
 
-def get_or_create(session: Session, Model: SQLModel, attribute: str, value: str, extra: dict = None) -> SQLModel:
-    """Return an existing record matching (attribute=value) or create one."""
-    result = session.exec(select(Model).where(getattr(Model, attribute) == value)).first()
+
+def get_or_create(
+    session: Session,
+    model: SQLModel,
+    attribute: str,
+    value: str,
+    extra: dict | None = None,
+) -> SQLModel:
+    """Return an existing record matching (attribute=value) or create one.
+
+    Parameters
+    ----------
+    session : Session
+        The active database session.
+    model : SQLModel
+        The SQLModel class to query and create (e.g., Author, DataSource).
+    attribute : str
+        The name of the attribute/column to filter by (e.g., "name").
+    value : str
+        The value to search for in the specified attribute.
+    extra : dict, optional
+        Additional attributes to set on the new record if it needs to be created.
+
+    Returns
+    -------
+    SQLModel
+        The existing or newly created record matching the criteria.
+    """
+    result = session.exec(
+        select(model).where(getattr(model, attribute) == value)
+    ).first()
     if not result:
         data = {attribute: value, **(extra or {})}
-        result = Model(**data)
+        result = model(**data)
         session.add(result)
         session.flush()  # Assigns the PK without a full commit
     return result
 
 
 def update_dataset_fields(existing: Dataset, row: pd.Series, fields: list[str]) -> bool:
-    """Update fields on an existing Dataset row. Returns True if anything changed."""
+    """Update fields on an existing Dataset row. Returns True if anything changed.
+
+    Parameters
+    ----------
+    existing : Dataset
+        The existing Dataset object from the database.
+    row : pd.Series
+        The new data for the dataset, as a pandas Series.
+    fields : list[str]
+        The list of field names to compare and update.
+
+    Returns
+    -------
+    bool        True if any field was updated, False if all fields were unchanged.
+    """
     changed = False
     for field in fields:
         new_value = row[field]
@@ -110,9 +152,9 @@ def delete_files_for_update(engine: Engine, dataset_ids: list[int]) -> None:
     """Delete all File (and related) rows for the given dataset IDs."""
     with Session(engine) as session:
         r_files = session.exec(delete(File).where(File.dataset_id.in_(dataset_ids)))
-        r_traj  = session.exec(delete(TrajectoryFile))
+        r_traj = session.exec(delete(TrajectoryFile))
         r_param = session.exec(delete(ParameterFile))
-        r_topo  = session.exec(delete(TopologyFile))
+        r_topo = session.exec(delete(TopologyFile))
         session.commit()
 
     logger.info(f"Deleted {r_files.rowcount} File rows for updated datasets.")
@@ -125,39 +167,70 @@ def delete_files_for_update(engine: Engine, dataset_ids: list[int]) -> None:
 # Data loading
 # ============================================================================
 
+
 def load_datasets_data(parquet_path: str) -> pd.DataFrame:
+    """Load datasets parquet and rename columns to match the database schema.
+
+    Parameters
+    ----------
+    parquet_path : str
+        The path to the parquet file containing datasets metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with columns renamed to match the database schema, and
+        additional columns computed as needed
+        (e.g., 'author', 'keywords', 'data_source_url').
+    """
     df = pd.read_parquet(parquet_path)
 
-    df = df.rename(columns={
-        "dataset_repository_name":    "data_source",
-        "dataset_id_in_repository":   "id_in_data_source",
-        "dataset_url_in_repository":  "url_in_data_source",
-        "date_last_updated":          "date_last_modified",
-        "date_last_fetched":          "date_last_crawled",
-        "number_of_files":            "file_number",
-    })
+    df = df.rename(
+        columns={
+            "dataset_repository_name": "data_source",
+            "dataset_id_in_repository": "id_in_data_source",
+            "dataset_url_in_repository": "url_in_data_source",
+            "date_last_updated": "date_last_modified",
+            "date_last_fetched": "date_last_crawled",
+            "number_of_files": "file_number",
+        }
+    )
 
     df["author"] = df["author_names"].apply(
-        lambda x: ",".join(x) if hasattr(x, "__iter__") and not isinstance(x, str) else ""
+        lambda x: (
+            ",".join(x) if hasattr(x, "__iter__") and not isinstance(x, str) else ""
+        )
     )
     df["keywords"] = df["keywords"].apply(
-        lambda x: ";".join(x).lower() if hasattr(x, "__iter__") and not isinstance(x, str) else ""
+        lambda x: (
+            ";".join(x).lower()
+            if hasattr(x, "__iter__") and not isinstance(x, str)
+            else ""
+        )
     )
 
     source_urls = {
-        "zenodo":            "https://zenodo.org/",
-        "figshare":          "https://figshare.com/",
-        "atlas":             "https://www.dsimb.inserm.fr/ATLAS/",
-        "nomad":             "https://nomad-lab.eu/",
-        "gpcrmd":            "https://www.gpcrmd.org/",
-        "mdposit_mmb_node":   "https://mmb.mddbr.eu/",
+        "zenodo": "https://zenodo.org/",
+        "figshare": "https://figshare.com/",
+        "atlas": "https://www.dsimb.inserm.fr/ATLAS/",
+        "nomad": "https://nomad-lab.eu/",
+        "gpcrmd": "https://www.gpcrmd.org/",
+        "mdposit_mmb_node": "https://mmb.mddbr.eu/",
         "mdposit_inria_node": "https://dynarepo.inria.fr/",
-        "mdposit_cineca_node":"https://cineca.mddbr.eu/",
+        "mdposit_cineca_node": "https://cineca.mddbr.eu/",
     }
     df["data_source_url"] = df["data_source"].map(source_urls)
 
-    for col in ["doi", "description", "license", "download_number",
-                "view_number", "file_number", "date_created", "date_last_modified"]:
+    for col in [
+        "doi",
+        "description",
+        "license",
+        "download_number",
+        "view_number",
+        "file_number",
+        "date_created",
+        "date_last_modified",
+    ]:
         if col not in df.columns:
             df[col] = None
 
@@ -166,60 +239,139 @@ def load_datasets_data(parquet_path: str) -> pd.DataFrame:
 
 
 def load_files_data(parquet_path: str) -> pd.DataFrame:
+    """Load files parquet and rename columns to match the database schema.
+
+    Parameters
+    ----------
+    parquet_path : str
+        The path to the parquet file containing files metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with columns renamed to match the database schema, and
+        additional columns computed as needed (e.g., 'is_from_zip_file').
+    """
     df = pd.read_parquet(parquet_path)
 
-    df = df.rename(columns={
-        "dataset_repository_name":       "data_source",
-        "dataset_id_in_repository":      "dataset_id_in_data_source",
-        "file_name":                     "name",
-        "file_type":                     "type",
-        "file_size_in_bytes":            "size_in_bytes",
-        "file_md5":                      "md5",
-        "file_url_in_repository":        "url",
-        "containing_archive_file_name":  "parent_zip_file_name",
-    })
+    df = df.rename(
+        columns={
+            "dataset_repository_name": "data_source",
+            "dataset_id_in_repository": "dataset_id_in_data_source",
+            "file_name": "name",
+            "file_type": "type",
+            "file_size_in_bytes": "size_in_bytes",
+            "file_md5": "md5",
+            "file_url_in_repository": "url",
+            "containing_archive_file_name": "parent_zip_file_name",
+        }
+    )
 
     df["is_from_zip_file"] = df["parent_zip_file_name"].notna()
     return df
 
 
 def load_topology_data(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path)[[
-        "dataset_origin", "dataset_id", "file_name",
-        "atom_number", "has_protein", "has_nucleic",
-        "has_lipid", "has_glucid", "has_water_ion",
-    ]]
-    return df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
+    """Load topology parquet and rename columns to match the database schema.
+
+    Parameters
+    ----------
+    path : str
+        The path to the parquet file containing topology metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with columns renamed to match the database schema.
+    """
+    df = pd.read_parquet(path)[
+        [
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "atom_number",
+            "has_protein",
+            "has_nucleic",
+            "has_lipid",
+            "has_glucid",
+            "has_water_ion",
+        ]
+    ]
+    return df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
 
 
 def load_parameter_data(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path)[[
-        "dataset_origin", "dataset_id", "file_name",
-        "dt", "nsteps", "temperature", "thermostat", "barostat", "integrator",
-    ]]
-    df = df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
+    """Load parameter parquet and rename columns to match the database schema.
+
+    Parameters
+    ----------
+    path : str
+        The path to the parquet file containing parameter metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with columns renamed to match the database schema.
+    """
+    df = pd.read_parquet(path)[
+        [
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "dt",
+            "nsteps",
+            "temperature",
+            "thermostat",
+            "barostat",
+            "integrator",
+        ]
+    ]
+    df = df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
     df["integrator"] = df["integrator"].fillna("undefined")
     return df
 
 
 def load_trajectory_data(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path)[[
-        "dataset_origin", "dataset_id", "file_name",
-        "atom_number", "frame_number",
-    ]]
-    return df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
+    """Load trajectory parquet and rename columns to match the database schema.
+
+    Parameters
+    ----------
+    path : str
+        The path to the parquet file containing trajectory metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with columns renamed to match the database schema.
+    """
+    df = pd.read_parquet(path)[
+        [
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "atom_number",
+            "frame_number",
+        ]
+    ]
+    return df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
 
 
 # ============================================================================
@@ -227,20 +379,38 @@ def load_trajectory_data(path: str) -> pd.DataFrame:
 # ============================================================================
 
 DATASET_FIELDS = [
-    "doi", "date_created", "date_last_modified", "date_last_crawled",
-    "file_number", "url_in_data_source", "title", "description", "keywords",
+    "doi",
+    "date_created",
+    "date_last_modified",
+    "date_last_crawled",
+    "file_number",
+    "url_in_data_source",
+    "title",
+    "description",
+    "keywords",
 ]
 
 
 def create_or_update_datasets_authors_origins_tables(
-        df: pd.DataFrame,
-        engine: Engine,
+    df: pd.DataFrame,
+    engine: Engine,
 ) -> list[int]:
-    """
-    Upsert Dataset, Author, and DataSource rows.
+    """Upsert Dataset, Author, and DataSource rows.
 
     Returns the list of dataset PKs that were newly created or modified —
     the caller uses this to know which file records may need refreshing.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame containing dataset metadata.
+    engine : Engine
+        The SQLAlchemy engine to use for database operations.
+
+    Returns
+    -------
+    list[int]
+        A list of dataset primary keys that were newly created or modified.
     """
     ids_new, ids_modified, ids_unchanged = [], [], []
 
@@ -258,12 +428,18 @@ def create_or_update_datasets_authors_origins_tables(
             for d in session.exec(select(Dataset)).all()
         }
 
-        for i, (_, row) in enumerate(tqdm(df.iterrows(), total=len(df), desc="Datasets", unit="row")):
-
+        for i, (_, row) in enumerate(
+            tqdm(df.iterrows(), total=len(df), desc="Datasets", unit="row")
+        ):
             # ── DataSource ─────────────────────────────────────────────────
             src_name = row["data_source"]
             if src_name not in source_cache:
-                src = DataSource(name=src_name, url=row["data_source_url"], citation=None, comment=None)
+                src = DataSource(
+                    name=src_name,
+                    url=row["data_source_url"],
+                    citation=None,
+                    comment=None,
+                )
                 session.add(src)
                 session.flush()
                 source_cache[src_name] = src
@@ -336,27 +512,33 @@ def create_or_update_datasets_authors_origins_tables(
 # File / FileType ingestion
 # ============================================================================
 
-def create_files_tables(files_df: pd.DataFrame, engine: Engine) -> None:
-    """
-    Bulk-upsert File and FileType rows.
+
+def create_files_tables(files_df: pd.DataFrame, engine: Engine):  # noqa: C901
+    """Bulk-upsert File and FileType rows.
 
     Strategy:
-    - Load all existing (dataset_id, file_name) pairs into a set → O(1) existence checks.
+    - Load all existing (dataset_id, file_name) pairs into a set.
     - Load all Dataset PKs into a dict keyed by (id_in_data_source, source_name).
     - Load all FileType PKs into a dict keyed by name.
     - Commit every BATCH_SIZE rows instead of once per row.
+
+    Parameters
+    ----------
+    files_df : pd.DataFrame
+        The DataFrame containing file metadata.
+    engine : Engine
+        The SQLAlchemy engine to use for database operations.
     """
     created = skipped = 0
 
     with Session(engine) as session:
-
         # ── Pre-load lookup tables ─────────────────────────────────────────
         logger.info("Loading existing records into memory caches…")
 
         # (data_source_name, id_in_data_source) → (dataset_pk, ...)
         datasets: dict[tuple, Dataset] = {}
         for ds in session.exec(select(Dataset).join(DataSource)).all():
-            datasets[(ds.data_source.name, ds.id_in_data_source)] = ds
+            datasets[ds.data_source.name, ds.id_in_data_source] = ds
 
         file_type_cache: dict[str, FileType] = {
             ft.name: ft for ft in session.exec(select(FileType)).all()
@@ -373,8 +555,9 @@ def create_files_tables(files_df: pd.DataFrame, engine: Engine) -> None:
 
         logger.info("Caches loaded. Processing file rows…")
 
-        for i, (_, row) in enumerate(tqdm(files_df.iterrows(), total=len(files_df), desc="Files", unit="row")):
-
+        for i, (_, row) in enumerate(
+            tqdm(files_df.iterrows(), total=len(files_df), desc="Files", unit="row")
+        ):
             src_key = (row["data_source"], row["dataset_id_in_data_source"])
             ds = datasets.get(src_key)
             if not ds:
@@ -434,7 +617,7 @@ def create_files_tables(files_df: pd.DataFrame, engine: Engine) -> None:
 
             # Cache this file if it could be a zip parent
             if not row["is_from_zip_file"] and ft_name == "zip":
-                zip_cache[(ds.dataset_id, row["name"])] = new_file.file_id
+                zip_cache[ds.dataset_id, row["name"]] = new_file.file_id
 
             if (i + 1) % BATCH_SIZE == 0:
                 session.commit()
@@ -450,8 +633,23 @@ def create_files_tables(files_df: pd.DataFrame, engine: Engine) -> None:
 # Topology / Parameter / Trajectory ingestion
 # ============================================================================
 
+
 def _build_file_lookup(session: Session, file_type_name: str) -> dict[tuple, int]:
-    """Return {(dataset_id, file_name): file_id} for a given file type."""
+    """Build file lookup {(dataset_id, file_name): file_id} for a given file type.
+
+    Parameters
+    ----------
+    session : Session
+        The active database session.
+    file_type_name : str
+        The name of the FileType to filter by (e.g., "gro", "mdp", "xtc").
+
+    Returns
+    -------
+    dict[tuple, int]
+        A dictionary mapping (dataset_id, file_name) to file_id for files
+        of the specified type.
+    """
     rows = session.exec(
         select(File.dataset_id, File.name, File.file_id)
         .join(FileType)
@@ -461,33 +659,49 @@ def _build_file_lookup(session: Session, file_type_name: str) -> dict[tuple, int
 
 
 def _build_dataset_lookup(session: Session) -> dict[tuple, int]:
-    """Return {(data_source_name, id_in_data_source): dataset_id}."""
+    """Return {(data_source_name, id_in_data_source): dataset_id}.
+
+    Parameters
+    ----------
+    session : Session
+        The active database session.
+
+    Returns
+    -------
+    dict[tuple, int]
+        A dictionary mapping (data_source_name, id_in_data_source) to dataset_id.
+    """
     rows = session.exec(select(Dataset).join(DataSource)).all()
     return {(ds.data_source.name, ds.id_in_data_source): ds.dataset_id for ds in rows}
 
 
 def create_topology_table(df: pd.DataFrame, engine: Engine) -> None:
+    """Create TopologyFile table from parquet file."""
     with Session(engine) as session:
-        ds_lookup  = _build_dataset_lookup(session)
+        ds_lookup = _build_dataset_lookup(session)
         file_lookup = _build_file_lookup(session, "gro")
 
         objects = []
         for _, row in tqdm(df.iterrows(), total=len(df), desc="Topology", unit="row"):
-            ds_id = ds_lookup.get((row["data_source"], row["dataset_id_in_data_source"]))
+            ds_id = ds_lookup.get(
+                (row["data_source"], row["dataset_id_in_data_source"])
+            )
             if not ds_id:
                 continue
             file_id = file_lookup.get((ds_id, row["name"]))
             if not file_id:
                 continue
-            objects.append(TopologyFile(
-                file_id=file_id,
-                atom_number=row["atom_number"],
-                has_protein=row["has_protein"],
-                has_nucleic=row["has_nucleic"],
-                has_lipid=row["has_lipid"],
-                has_glucid=row["has_glucid"],
-                has_water_ion=row["has_water_ion"],
-            ))
+            objects.append(
+                TopologyFile(
+                    file_id=file_id,
+                    atom_number=row["atom_number"],
+                    has_protein=row["has_protein"],
+                    has_nucleic=row["has_nucleic"],
+                    has_lipid=row["has_lipid"],
+                    has_glucid=row["has_glucid"],
+                    has_water_ion=row["has_water_ion"],
+                )
+            )
 
         session.add_all(objects)
         session.commit()
@@ -496,27 +710,32 @@ def create_topology_table(df: pd.DataFrame, engine: Engine) -> None:
 
 
 def create_parameters_table(df: pd.DataFrame, engine: Engine) -> None:
+    """Create ParameterFile table from parquet file."""
     with Session(engine) as session:
-        ds_lookup  = _build_dataset_lookup(session)
+        ds_lookup = _build_dataset_lookup(session)
         file_lookup = _build_file_lookup(session, "mdp")
 
         objects = []
         for _, row in tqdm(df.iterrows(), total=len(df), desc="Parameters", unit="row"):
-            ds_id = ds_lookup.get((row["data_source"], row["dataset_id_in_data_source"]))
+            ds_id = ds_lookup.get(
+                (row["data_source"], row["dataset_id_in_data_source"])
+            )
             if not ds_id:
                 continue
             file_id = file_lookup.get((ds_id, row["name"]))
             if not file_id:
                 continue
-            objects.append(ParameterFile(
-                file_id=file_id,
-                dt=row["dt"],
-                nsteps=row["nsteps"],
-                temperature=row["temperature"],
-                thermostat=row["thermostat"],
-                barostat=row["barostat"],
-                integrator=row["integrator"],
-            ))
+            objects.append(
+                ParameterFile(
+                    file_id=file_id,
+                    dt=row["dt"],
+                    nsteps=row["nsteps"],
+                    temperature=row["temperature"],
+                    thermostat=row["thermostat"],
+                    barostat=row["barostat"],
+                    integrator=row["integrator"],
+                )
+            )
 
         session.add_all(objects)
         session.commit()
@@ -525,13 +744,18 @@ def create_parameters_table(df: pd.DataFrame, engine: Engine) -> None:
 
 
 def create_trajectory_table(df: pd.DataFrame, engine: Engine) -> None:
+    """Create TrajectoryFile table from parquet file."""
     with Session(engine) as session:
-        ds_lookup  = _build_dataset_lookup(session)
+        ds_lookup = _build_dataset_lookup(session)
         file_lookup = _build_file_lookup(session, "xtc")
 
         objects, missing = [], 0
-        for _, row in tqdm(df.iterrows(), total=len(df), desc="Trajectories", unit="row"):
-            ds_id = ds_lookup.get((row["data_source"], row["dataset_id_in_data_source"]))
+        for _, row in tqdm(
+            df.iterrows(), total=len(df), desc="Trajectories", unit="row"
+        ):
+            ds_id = ds_lookup.get(
+                (row["data_source"], row["dataset_id_in_data_source"])
+            )
             if not ds_id:
                 missing += 1
                 continue
@@ -539,11 +763,13 @@ def create_trajectory_table(df: pd.DataFrame, engine: Engine) -> None:
             if not file_id:
                 missing += 1
                 continue
-            objects.append(TrajectoryFile(
-                file_id=file_id,
-                atom_number=row["atom_number"],
-                frame_number=row["frame_number"],
-            ))
+            objects.append(
+                TrajectoryFile(
+                    file_id=file_id,
+                    atom_number=row["atom_number"],
+                    frame_number=row["frame_number"],
+                )
+            )
 
         session.add_all(objects)
         session.commit()
@@ -552,12 +778,13 @@ def create_trajectory_table(df: pd.DataFrame, engine: Engine) -> None:
 
 
 def create_simulation_tables(engine: Engine) -> None:
+    """Create simulation tables from parquet files."""
     mdp_path = "data/parquet_files/gromacs_mdp_files.parquet"
     gro_path = "data/parquet_files/gromacs_gro_files.parquet"
     xtc_path = "data/parquet_files/gromacs_xtc_files.parquet"
 
     logger.info("Loading simulation parquet files…")
-    topology_df  = load_topology_data(gro_path)
+    topology_df = load_topology_data(gro_path)
     parameter_df = load_parameter_data(mdp_path)
     trajectory_df = load_trajectory_data(xtc_path)
 
@@ -577,17 +804,21 @@ def create_simulation_tables(engine: Engine) -> None:
 # Entry point
 # ============================================================================
 
+
 def data_ingestion(parquet_path: str) -> None:
     """
     Ingest a single parquet file into the database.
 
     Filename must contain '_datasets' or '_files' to select the pipeline.
 
-    Examples:
+    Examples
+    --------
         uv run src/ingest_data.py data/atlas/2026-02-18/atlas_datasets.parquet
         uv run src/ingest_data.py data/zenodo/2026-02-18/zenodo_files.parquet
     """
     path = Path(parquet_path)
+
+    engine = load("data/database.db")
 
     if not path.exists():
         logger.error(f"File not found: {parquet_path}")
@@ -605,7 +836,10 @@ def data_ingestion(parquet_path: str) -> None:
         df = load_datasets_data(parquet_path)
         new_or_modified = create_or_update_datasets_authors_origins_tables(df, engine)
         if new_or_modified:
-            logger.info(f"{len(new_or_modified)} datasets new/modified — run the matching files parquet next.")
+            logger.info(
+                f"{len(new_or_modified)} datasets new/modified "
+                "— run the matching files parquet next."
+            )
         else:
             logger.info("No new or modified datasets.")
 
@@ -624,9 +858,14 @@ def data_ingestion(parquet_path: str) -> None:
     logger.success("Done.")
 
 
-if __name__ == "__main__":
+def main():
+    """Start the script."""
     if len(sys.argv) < 2:
         logger.error("Usage: uv run src/ingest_data.py <path_to_parquet>")
         sys.exit(1)
 
     data_ingestion(sys.argv[1])
+
+
+if __name__ == "__main__":
+    main()
