@@ -3,6 +3,8 @@ from datetime import datetime
 import numpy as np
 from bokeh.models import ColumnDataSource, NumeralTickFormatter
 from bokeh.plotting import figure
+from cachetools import cached
+from cachetools.keys import hashkey
 from mdverse.database.database import (
     Dataset,
     DataSource,
@@ -23,11 +25,15 @@ COLORS = {
     "zenodo": "#0AAC00",
 }
 
+
 # ============================================================================
 # Queries for index.html
 # ============================================================================
-
-
+@cached(
+    cache={},
+    # Hash the session's engine URL and not the session itself that is not hashable.
+    key=lambda session: hashkey(session.get_bind().engine.url),
+)
 def get_dataset_origin_summary(session: Session) -> tuple[list[any], dict[str, str]]:
     """
     Returns rows grouped by dataset origin, with columns:
@@ -141,6 +147,13 @@ def extract_data_repository_names(session: Session):
     return session.exec(statement).all()
 
 
+@cached(
+    cache={},
+    # Hash the session's engine URL and not the session itself that is not hashable.
+    key=lambda session, origin_name: hashkey(
+        session.get_bind().engine.url, origin_name
+    ),
+)
 def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
     statement = (
         select(
@@ -157,7 +170,13 @@ def get_files_yearly_counts_for_origin(session: Session, origin_name: str):
     return {int(row.year): row.count for row in results if row.year is not None}
 
 
-# Similarly, create a plot for datasets per year.
+@cached(
+    cache={},
+    # Hash the session's engine URL and not the session itself that is not hashable.
+    key=lambda session, origin_name: hashkey(
+        session.get_bind().engine.url, origin_name
+    ),
+)
 def get_dataset_yearly_counts_for_origin(session: Session, origin_name: str):
     statement = (
         select(

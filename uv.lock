@@ -224,6 +224,15 @@ wheels = [
 ]
 
 [[package]]
+name = "cachetools"
+version = "7.0.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/76/7b/1755ed2c6bfabd1d98b37ae73152f8dcf94aa40fee119d163c19ed484704/cachetools-7.0.6.tar.gz", hash = "sha256:e5d524d36d65703a87243a26ff08ad84f73352adbeafb1cde81e207b456aaf24", size = 37526, upload-time = "2026-04-20T19:02:23.289Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/c4/cf76242a5da1410917107ff14551764aa405a5fd10cd10cf9a5ca8fa77f4/cachetools-7.0.6-py3-none-any.whl", hash = "sha256:4e94956cfdd3086f12042cdd29318f5ced3893014f7d0d059bf3ead3f85b7f8b", size = 13976, upload-time = "2026-04-20T19:02:21.187Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -1730,6 +1739,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "bokeh" },
+    { name = "cachetools" },
     { name = "certifi" },
     { name = "click" },
     { name = "fastapi", extra = ["standard"] },
@@ -1770,6 +1780,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "bokeh", specifier = ">=3.9.0" },
+    { name = "cachetools", specifier = ">=7.0.6" },
     { name = "certifi", specifier = ">=2026.1.4" },
     { name = "click", specifier = ">=8.3.1" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.0" },
