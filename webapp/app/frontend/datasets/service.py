@@ -65,7 +65,6 @@ def get_all_datasets_for_datatables(
         statement = statement.where(
             or_(
                 DataSource.name.ilike(f"%{search}%"),
-                Dataset.id_in_data_source.ilike(f"%{search}%"),
                 Dataset.title.ilike(f"%{search}%"),
                 Dataset.description.ilike(f"%{search}%"),
             )
