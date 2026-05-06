@@ -87,12 +87,10 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS datasets (
     dataset_id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    data_source_id      INTEGER NOT NULL
-                            REFERENCES data_sources (data_source_id),
+    data_source_id      INTEGER NOT NULL REFERENCES data_sources (data_source_id),
     id_in_data_source   TEXT    NOT NULL,
     url_in_data_source  TEXT,
-    project_id          INTEGER
-                            REFERENCES projects (project_id),
+    project_id          INTEGER REFERENCES projects (project_id),
     id_in_project       TEXT,
     url_in_project      TEXT,
     doi                 TEXT,
@@ -110,33 +108,23 @@ CREATE TABLE IF NOT EXISTS datasets (
 
 CREATE TABLE IF NOT EXISTS files (
     file_id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    dataset_id          INTEGER NOT NULL
-                            REFERENCES datasets (dataset_id)
-                            ON DELETE CASCADE,
+    dataset_id          INTEGER NOT NULL REFERENCES datasets (dataset_id),
     name                TEXT    NOT NULL,
-    file_type_id        INTEGER NOT NULL
-                            REFERENCES file_types (file_type_id),
+    file_type_id        INTEGER NOT NULL REFERENCES file_types (file_type_id),
     size_in_bytes       REAL,
     md5                 TEXT,
     url                 TEXT,
     is_from_zip_file    INTEGER NOT NULL,
-    parent_zip_file_id  INTEGER
-                            REFERENCES files (file_id)
+    parent_zip_file_id  INTEGER REFERENCES files (file_id)
 );
 
 CREATE TABLE IF NOT EXISTS annotations (
     annotation_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    dataset_id          INTEGER NOT NULL
-                            REFERENCES datasets (dataset_id),
-    provenance_type_id  INTEGER NOT NULL
-                            REFERENCES provenance_types (provenance_id),
-    annotation_type_id  INTEGER NOT NULL
-                            REFERENCES annotation_types (annotation_type_id),
-    file_id             INTEGER
-                            REFERENCES files (file_id)
-                            ON DELETE CASCADE,
-    paper_id            INTEGER
-                            REFERENCES papers (paper_id),
+    dataset_id          INTEGER NOT NULL REFERENCES datasets (dataset_id),
+    provenance_type_id  INTEGER NOT NULL REFERENCES provenance_types (provenance_id),
+    annotation_type_id  INTEGER NOT NULL REFERENCES annotation_types (annotation_type_id),
+    file_id             INTEGER REFERENCES files (file_id),
+    paper_id            INTEGER REFERENCES papers (paper_id),
     value               TEXT    NOT NULL,
     quality_score       TEXT,
     value_extra         TEXT,
@@ -145,23 +133,18 @@ CREATE TABLE IF NOT EXISTS annotations (
 
 CREATE TABLE IF NOT EXISTS molecules (
     molecule_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    annotation_id     INTEGER NOT NULL
-                          REFERENCES annotations (annotation_id)
-                          ON DELETE CASCADE,
+    annotation_id     INTEGER NOT NULL REFERENCES annotations (annotation_id),
     name              TEXT    NOT NULL,
     formula           TEXT    NOT NULL,
     sequence          TEXT    NOT NULL,
-    molecule_type_id  INTEGER
-                          REFERENCES molecule_types (molecule_type_id)
+    molecule_type_id  INTEGER REFERENCES molecule_types (molecule_type_id)
 );
 
 -- ── Simulation File Tables ────────────────────────────────────
 -- file_id is both PK and FK — enforces one metadata record per file.
 
 CREATE TABLE IF NOT EXISTS topology_files (
-    file_id        INTEGER PRIMARY KEY
-                       REFERENCES files (file_id)
-                       ON DELETE CASCADE,
+    file_id        INTEGER PRIMARY KEY REFERENCES files (file_id),
     atom_number    INTEGER NOT NULL,
     has_protein    INTEGER NOT NULL,
     has_nucleic    INTEGER NOT NULL,
@@ -171,9 +154,7 @@ CREATE TABLE IF NOT EXISTS topology_files (
 );
 
 CREATE TABLE IF NOT EXISTS parameter_files (
-    file_id      INTEGER PRIMARY KEY
-                     REFERENCES files (file_id)
-                     ON DELETE CASCADE,
+    file_id      INTEGER PRIMARY KEY REFERENCES files (file_id),
     dt           REAL,
     nsteps       INTEGER,
     temperature  REAL,
@@ -183,21 +164,17 @@ CREATE TABLE IF NOT EXISTS parameter_files (
 );
 
 CREATE TABLE IF NOT EXISTS trajectory_files (
-    file_id       INTEGER PRIMARY KEY
-                      REFERENCES files (file_id)
-                      ON DELETE CASCADE,
+    file_id       INTEGER PRIMARY KEY REFERENCES files (file_id),
     atom_number   INTEGER NOT NULL,
     frame_number  INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS molecules_external_db (
     mol_ext_db_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    molecule_id         INTEGER NOT NULL
-                            REFERENCES molecules (molecule_id),
+    molecule_id         INTEGER NOT NULL REFERENCES molecules (molecule_id),
     db_name             TEXT    NOT NULL,
     id_in_external_db   TEXT    NOT NULL,
-    database_id         INTEGER
-                            REFERENCES databases (database_id)
+    database_id         INTEGER REFERENCES databases (database_id)
 );
 
 -- ── Indexes ───────────────────────────────────────────────────
@@ -212,17 +189,13 @@ CREATE INDEX IF NOT EXISTS idx_mol_ext_db_db_name
 -- Created LAST — both referenced tables must already exist.
 
 CREATE TABLE IF NOT EXISTS datasets_authors_link (
-    dataset_id  INTEGER NOT NULL
-                    REFERENCES datasets (dataset_id),
-    author_id   INTEGER NOT NULL
-                    REFERENCES authors (author_id),
+    dataset_id  INTEGER NOT NULL REFERENCES datasets (dataset_id),
+    author_id   INTEGER NOT NULL REFERENCES authors (author_id),
     PRIMARY KEY (dataset_id, author_id)
 );
 
 CREATE TABLE IF NOT EXISTS authors_papers_link (
-    author_id  INTEGER NOT NULL
-                   REFERENCES authors (author_id),
-    paper_id   INTEGER NOT NULL
-                   REFERENCES papers (paper_id),
+    author_id  INTEGER NOT NULL REFERENCES authors (author_id),
+    paper_id   INTEGER NOT NULL REFERENCES papers (paper_id),
     PRIMARY KEY (author_id, paper_id)
 );
