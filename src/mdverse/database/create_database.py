@@ -1,16 +1,27 @@
-"""Create MDverse datalogue database and tables."""
+"""
+create_database.py
+------------------
+Creates the MDverse SQLite database from database_schema.sql.
 
-import time
+Usage:
+    uv run create_database.py --db database.db --schema database_schema.sql
+"""
 
-from .database import create
+import sqlite3
+import argparse
+from pathlib import Path
 
 
-def main():
-    """Create the database and tables."""
-    start = time.perf_counter()
-    create()
-    execution_time = time.perf_counter() - start
-    print(f"Database and tables created in {execution_time:.2f} seconds")
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db",     required=True, help="Path to the SQLite database file.")
+    parser.add_argument("--schema", required=True, help="Path to the SQL schema file.")
+    args = parser.parse_args()
+
+    conn = sqlite3.connect(args.db)
+    conn.executescript(Path(args.schema).read_text())
+    conn.close()
+    print(f"OK | Database created: {args.db}")
 
 
 if __name__ == "__main__":
