@@ -41,7 +41,6 @@ Usage:
 import sys
 import argparse
 import time
-import multiprocessing
 from datetime import timedelta
 from pathlib import Path
 
@@ -77,16 +76,16 @@ def fetch_one(conn: duckdb.DuckDBPyConnection, sql: str, params: list | None = N
 # All subqueries are resolved entirely inside DuckDB.
 
 # dataset mode subqueries
-_D_DS  = "SELECT $1::INTEGER"
-_D_FI  = f"SELECT file_id       FROM files       WHERE dataset_id    IN ({_D_DS})"
-_D_AN  = f"SELECT annotation_id FROM annotations WHERE dataset_id    IN ({_D_DS})"
-_D_MO  = f"SELECT molecule_id   FROM molecules   WHERE annotation_id IN ({_D_AN})"
+_D_DS = "SELECT $1::INTEGER"
+_D_FI = f"SELECT file_id       FROM files       WHERE dataset_id    IN ({_D_DS})"
+_D_AN = f"SELECT annotation_id FROM annotations WHERE dataset_id    IN ({_D_DS})"
+_D_MO = f"SELECT molecule_id   FROM molecules   WHERE annotation_id IN ({_D_AN})"
 
 # source mode subqueries
-_S_DS  = "SELECT dataset_id FROM datasets WHERE data_source_id = (SELECT data_source_id FROM data_sources WHERE name = $1)"
-_S_FI  = f"SELECT file_id       FROM files       WHERE dataset_id    IN ({_S_DS})"
-_S_AN  = f"SELECT annotation_id FROM annotations WHERE dataset_id    IN ({_S_DS})"
-_S_MO  = f"SELECT molecule_id   FROM molecules   WHERE annotation_id IN ({_S_AN})"
+_S_DS = "SELECT dataset_id FROM datasets WHERE data_source_id = (SELECT data_source_id FROM data_sources WHERE name = $1)"
+_S_FI = f"SELECT file_id       FROM files       WHERE dataset_id    IN ({_S_DS})"
+_S_AN = f"SELECT annotation_id FROM annotations WHERE dataset_id    IN ({_S_DS})"
+_S_MO = f"SELECT molecule_id   FROM molecules   WHERE annotation_id IN ({_S_AN})"
 
 
 # ── Core deletion logic ────────────────────────────────────────────────────────
@@ -138,9 +137,9 @@ def _delete(conn: duckdb.DuckDBPyConnection, param: list, ds: str, fi: str, an: 
     )
     # 4. simulation-file metadata
     for table, label in [
-        ("topology_files",  "TopologyFile"),
-        ("parameter_files", "ParameterFile"),
-        ("trajectory_files","TrajectoryFile"),
+        ("topology_files",   "TopologyFile"),
+        ("parameter_files",  "ParameterFile"),
+        ("trajectory_files", "TrajectoryFile"),
     ]:
         run(label,
             f"SELECT COUNT(*) FROM {table} WHERE file_id IN ({fi})",
@@ -218,62 +217,6 @@ def delete_dataset(source_name: str, id_in_source: str, dry_run: bool = False) -
     _log_counts(counts, dry_run)
 
 
-def _delete_source_worker(db_path: str, source_name: str) -> None:
-    """
-    Runs in a separate process to avoid a DuckDB 1.5.x memory corruption bug
-    (free(): corrupted unsorted chunks) triggered by large deletes via the
-    Python API after an input() call in the parent process.
-
-    Zenodo has 93% zip-children files (~470k rows), which crashes even the
-    child process in a single DELETE. Batching by dataset (100 at a time)
-    keeps each operation small enough to avoid the bug.
-    """
-    conn = duckdb.connect(db_path)
-    dataset_ids = [
-        r[0] for r in conn.execute(
-            "SELECT dataset_id FROM datasets WHERE data_source_id = "
-            "(SELECT data_source_id FROM data_sources WHERE name = $1)",
-            [source_name],
-        ).fetchall()
-    ]
-    conn.close()
-
-    # Process in batches of 100 datasets — keeps each DELETE small
-    batch_size = 100
-    p = "SELECT unnest($1::INTEGER[])"
-    for i in range(0, len(dataset_ids), batch_size):
-        batch = dataset_ids[i : i + batch_size]
-        conn = duckdb.connect(db_path)
-
-        # Simulation file metadata
-        for table in ("molecules_external_db", "molecules", "annotations",
-                      "topology_files", "parameter_files", "trajectory_files",
-                      "datasets_authors_link"):
-            col = ("molecule_id" if table == "molecules_external_db"
-                   else "annotation_id" if table in ("molecules",)
-                   else "file_id" if table in ("topology_files", "parameter_files", "trajectory_files")
-                   else "dataset_id")
-            if col == "molecule_id":
-                conn.execute(f"DELETE FROM {table} WHERE molecule_id IN (SELECT molecule_id FROM molecules WHERE annotation_id IN (SELECT annotation_id FROM annotations WHERE dataset_id IN ({p})))", [batch])
-            elif col == "annotation_id":
-                conn.execute(f"DELETE FROM {table} WHERE annotation_id IN (SELECT annotation_id FROM annotations WHERE dataset_id IN ({p}))", [batch])
-            elif col == "file_id":
-                conn.execute(f"DELETE FROM {table} WHERE file_id IN (SELECT file_id FROM files WHERE dataset_id IN ({p}))", [batch])
-            else:
-                conn.execute(f"DELETE FROM {table} WHERE dataset_id IN ({p})", [batch])
-
-        # Files: zip-children first, then top-level
-        conn.execute(f"DELETE FROM files WHERE parent_zip_file_id IS NOT NULL AND dataset_id IN ({p})", [batch])
-        conn.execute(f"DELETE FROM files WHERE parent_zip_file_id IS NULL AND dataset_id IN ({p})", [batch])
-        conn.execute(f"DELETE FROM datasets WHERE dataset_id IN ({p})", [batch])
-        conn.close()
-
-    # Remove the source itself
-    conn = duckdb.connect(db_path)
-    conn.execute("DELETE FROM data_sources WHERE name = $1", [source_name])
-    conn.close()
-
-
 def delete_source(source_name: str, dry_run: bool = False) -> None:
     """Remove ALL datasets belonging to a data source, then the source itself."""
     print(f"INFO  | Mode: DELETE SOURCE  |  datarepo='{source_name}'")
@@ -282,7 +225,7 @@ def delete_source(source_name: str, dry_run: bool = False) -> None:
 
     conn = get_connection()
 
-    source = fetch_one(conn, "SELECT data_source_id, name FROM data_sources WHERE name = $1", [source_name])
+    source = fetch_one(conn, "SELECT data_source_id FROM data_sources WHERE name = $1", [source_name])
     if not source:
         print(f"ERROR | Data source '{source_name}' not found.")
         conn.close(); sys.exit(1)
@@ -311,26 +254,17 @@ def delete_source(source_name: str, dry_run: bool = False) -> None:
             print("WARN  | Confirmation did not match. Aborting.")
             sys.exit(0)
 
-        # Run delete in a separate process — avoids a DuckDB 1.5.x memory
-        # corruption bug triggered by large deletes after input() in same process.
-        p = multiprocessing.Process(
-            target=_delete_source_worker,
-            args=(str(DB_PATH), source_name),
-        )
-        p.start()
-        p.join()
-
-        if p.exitcode != 0:
-            print(f"ERROR | Deletion process exited with code {p.exitcode}.")
-            print("WARN  | Re-run with --dry-run to check remaining data.")
-            sys.exit(1)
-
-        # Reopen to get final counts for the log
         conn = get_connection()
-        counts = {"MoleculeExternalDB": 0, "Molecule": 0, "Annotation": 0,
-                  "TopologyFile": 0, "ParameterFile": 0, "TrajectoryFile": 0,
-                  "DatasetAuthorLink": 0, "File": 0, "Dataset": 0, "DataSource": 1}
-        print("OK    | Deletion complete.")
+        try:
+            counts = _delete(conn, param, _S_DS, _S_FI, _S_AN, _S_MO)
+            conn.execute("DELETE FROM data_sources WHERE name = $1", param)
+            counts["DataSource"] = 1
+            print("OK    | Deletion complete.")
+        except Exception as exc:
+            print(f"ERROR | Deletion failed: {exc}")
+            print("WARN  | Re-run with --dry-run to check remaining data.")
+            conn.close(); sys.exit(1)
+
         conn.close()
 
     _log_counts(counts, dry_run)
@@ -346,8 +280,8 @@ def main() -> None:
             "Examples:\n"
             "  uv run delete_data_duckdb.py --datarepo zenodo --dry-run\n"
             "  uv run delete_data_duckdb.py --datarepo zenodo\n"
-            "  uv run delete_data_duckdb.py --datarepo zenodo --dataset <id_in_data_source> --dry-run\n"
-            "  uv run delete_data_duckdb.py --datarepo zenodo --dataset <id_in_data_source>"
+            "  uv run delete_data_duckdb.py --datarepo zenodo --dataset <ID_IN_SOURCE> --dry-run\n"
+            "  uv run delete_data_duckdb.py --datarepo zenodo --dataset <ID_IN_SOURCE>"
         ),
     )
     parser.add_argument(
@@ -383,5 +317,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     main()
