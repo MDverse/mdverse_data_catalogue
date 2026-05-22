@@ -53,6 +53,7 @@ dependencies = [
     "uvicorn>=0.45.0",
     "cachetools>=7.0.6",
     "dateparser>=1.4.0",
+    "duckdb>=1.5.3",
     "unzip-http>=0.7",
 ]
 
