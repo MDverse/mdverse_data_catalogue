@@ -223,13 +223,22 @@ uv run scripts/upload_datasets_to_zenodo.py --record 7856524 \
 uv run database-create
 ```
 
+This command reads the schema from `params/database_schema.sql` and creates
+a new DuckDB database file (`database.duckdb`).
+
+You can also specify custom paths:
+
+```sh
+uv run src/mdverse/database/create_database.py --db database.duckdb --schema params/database_schema.sql
+```
+
 ### Ingest datasets (all sources)
 
 Run the datasets parquet for each source first. This populates the `datasets`,
 `authors`, and `data_sources` tables.
 
 ```sh
-uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_datasets.parquet
+uv run database-ingest /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_datasets.parquet
 # same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
 ```
 
@@ -239,7 +248,7 @@ Once all datasets are ingested, run the files parquet for each source.
 This populates the `files` and `file_types` tables.
 
 ```sh
-uv run src/ingest_data.py /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_files.parquet
+uv run database-ingest /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_files.parquet
 # same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
 ```
 
@@ -257,8 +266,8 @@ The ingestion script is generic — you can ingest any single parquet file
 at any time by passing its path as an argument:
 
 ```sh
-uv run src/ingest_data.py /path/to/source_datasets.parquet
-uv run src/ingest_data.py /path/to/source_files.parquet
+uv run database-ingest /path/to/source_datasets.parquet
+uv run database-ingest /path/to/source_files.parquet
 ```
 
 The script automatically detects whether the file is a datasets or files
@@ -278,7 +287,6 @@ You can run these commands:
 uv run src/ingest_topol_files.py
 ```
 
-
 or
 
 ```sh
@@ -289,6 +297,22 @@ or
 
 ```sh
 uv run src/ingest_traj_files.py
+```
+
+### Delete a dataset or data source
+
+To delete a single dataset (dry-run first recommended):
+
+```sh
+uv run database-delete --datarepo zenodo --dataset <ID_IN_SOURCE> --dry-run
+uv run database-delete --datarepo zenodo --dataset <ID_IN_SOURCE>
+```
+
+To delete all datasets for an entire data source:
+
+```sh
+uv run database-delete --datarepo zenodo --dry-run
+uv run database-delete --datarepo zenodo
 ```
 
 ## Web application and API
