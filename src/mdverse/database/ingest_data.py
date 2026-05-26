@@ -1,14 +1,14 @@
 """
-ingest_data_duckdb.py
+ingest_data.py
 ---------------------
 Ingest parquet files into the MDverse DuckDB database.duckdb.
 
 Prerequisites:
-    python create_database_duckdb.py --db database.duckdb --schema database_schema_duckdb.sql
+    python create_database.py --db database.duckdb --schema params/database_schema.sql
 
 Usage:
-    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_files.parquet
+    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_datasets.parquet
+    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_files.parquet
 
 Performance strategy
 --------------------
@@ -77,7 +77,7 @@ logger.add(
 def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
     if not db_path.exists():
         logger.error(f"Database not found: {db_path}")
-        logger.error("Run create_database_duckdb.py first.")
+        logger.error("Run create_database.py first.")
         sys.exit(1)
     return duckdb.connect(str(db_path))
 
@@ -626,8 +626,8 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_files.parquet
+    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_datasets.parquet
+    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_files.parquet
         """,
     )
     parser.add_argument("parquet", metavar="PARQUET_FILE", help="Path to the parquet file.")
