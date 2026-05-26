@@ -1,10 +1,9 @@
 """
-report_duckdb.py
+report.py
 ---------
 Report row and column counts for all tables in the MDverse DuckDB database.
-
 Usage:
-    uv run report_duckdb.py
+    uv run database-report
 """
 
 import sys
