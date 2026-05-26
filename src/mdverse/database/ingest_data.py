@@ -1,34 +1,44 @@
 """
-ingest_data.py
-----------------------
-Ingest parquet files into the MDverse SQLite database (database.db).
+ingest_data_duckdb.py
+---------------------
+Ingest parquet files into the MDverse DuckDB database.duckdb.
 
-Prerequisites (run once before ingesting):
-    python create_database.py --db database.db --schema database_schema.sql
+Prerequisites:
+    python create_database_duckdb.py --db database.duckdb --schema database_schema_duckdb.sql
 
 Usage:
-    uv run ingest_data.py /mdverse_sandbox/data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data.py /mdverse_sandbox/data/zenodo/2026-02-16/zenodo_files.parquet
+    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_datasets.parquet
+    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_files.parquet
+
+Performance strategy
+--------------------
+Every pipeline avoids Python row-by-row loops for inserts. Instead:
+
+  Datasets  — DataFrame registered as a DuckDB in-memory view; all
+              INSERT / UPDATE / author-link operations are pure SQL joins.
+              Zero Python loops over individual rows.
+
+  Files     — same approach. Bulk INSERT INTO files SELECT ... FROM view
+              JOIN datasets. Parent-zip resolution is a SQL self-join (2 passes).
 """
 
 import sys
-import sqlite3
 import argparse
 import time
 from datetime import timedelta
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
 from loguru import logger
-from tqdm import tqdm
+
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-DB_PATH    = Path(__file__).parent / "database.db"
-BATCH_SIZE = 5_000   # rows per commit; ~5 MB worst-case, safe for any SSD
+DB_PATH = Path(__file__).parent / "database.duckdb"
 
 SOURCE_URLS: dict[str, str] = {
     "zenodo":              "https://zenodo.org/",
@@ -40,6 +50,7 @@ SOURCE_URLS: dict[str, str] = {
     "mdposit_inria_node":  "https://dynarepo.inria.fr/",
     "mdposit_cineca_node": "https://cineca.mddbr.eu/",
 }
+
 
 # ============================================================================
 # Logging
@@ -58,153 +69,23 @@ logger.add(
     level="DEBUG",
 )
 
+
 # ============================================================================
-# Database connection
+# Connection
 # ============================================================================
 
-def get_connection(db_path: Path) -> sqlite3.Connection:
-    """Open the SQLite database with performance PRAGMAs enabled."""
+def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
     if not db_path.exists():
         logger.error(f"Database not found: {db_path}")
-        logger.error("Run create_database.py first.")
+        logger.error("Run create_database_duckdb.py first.")
         sys.exit(1)
+    return duckdb.connect(str(db_path))
 
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys       = ON")
-    conn.execute("PRAGMA journal_mode       = WAL")
-    conn.execute("PRAGMA synchronous        = NORMAL")
-    conn.execute("PRAGMA cache_size         = -64000")   # 64 MB page cache
-    conn.execute("PRAGMA mmap_size          = 268435456") # 256 MB memory-map
-    conn.execute("PRAGMA temp_store         = MEMORY")
-    conn.execute("PRAGMA wal_autocheckpoint = 10000")
-    return conn
 
 # ============================================================================
-# In-memory cache loaders  (one bulk SELECT each, called once per run)
-# ============================================================================
-
-def load_data_source_cache(conn: sqlite3.Connection) -> dict[str, int]:
-    """name → data_source_id"""
-    return dict(conn.execute("SELECT name, data_source_id FROM data_sources").fetchall())
-
-
-def load_author_cache(conn: sqlite3.Connection) -> dict[str, int]:
-    """name → author_id"""
-    return dict(conn.execute("SELECT name, author_id FROM authors").fetchall())
-
-
-def load_file_type_cache(conn: sqlite3.Connection) -> dict[str, int]:
-    """name → file_type_id"""
-    return dict(conn.execute("SELECT name, file_type_id FROM file_types").fetchall())
-
-
-def load_dataset_cache(conn: sqlite3.Connection) -> dict[tuple[int, str], tuple]:
-    """(data_source_id, id_in_data_source) → (dataset_id, *tracked_fields)"""
-    rows = conn.execute(
-        """
-        SELECT dataset_id, data_source_id, id_in_data_source,
-               doi, date_created, date_last_modified, date_last_crawled,
-               file_number, url_in_data_source, title, description, keywords
-        FROM datasets
-        """
-    ).fetchall()
-    return {(r[1], r[2]): (r[0], *r[3:]) for r in rows}
-
-
-def load_dataset_authors_cache(conn: sqlite3.Connection) -> dict[int, set[int]]:
-    """dataset_id → set of author_ids"""
-    cache: dict[int, set[int]] = {}
-    for dataset_id, author_id in conn.execute(
-        "SELECT dataset_id, author_id FROM datasets_authors_link"
-    ).fetchall():
-        cache.setdefault(dataset_id, set()).add(author_id)
-    return cache
-
-
-def load_dataset_id_cache(conn: sqlite3.Connection) -> dict[tuple[str, str], int]:
-    """(data_source_name, id_in_data_source) → dataset_id"""
-    return {
-        (r[0], r[1]): r[2]
-        for r in conn.execute(
-            """
-            SELECT ds.name, d.id_in_data_source, d.dataset_id
-            FROM datasets d
-            JOIN data_sources ds ON ds.data_source_id = d.data_source_id
-            """
-        ).fetchall()
-    }
-
-
-def load_file_existence_cache(
-    conn: sqlite3.Connection,
-    dataset_ids: list[int],
-) -> set[tuple[int, str]]:
-    """(dataset_id, file_name) set — O(1) duplicate check during file insert."""
-    if not dataset_ids:
-        return set()
-    ph = ",".join("?" * len(dataset_ids))
-    return set(
-        conn.execute(
-            f"SELECT dataset_id, name FROM files WHERE dataset_id IN ({ph})",
-            dataset_ids,
-        ).fetchall()
-    )
-
-
-def load_file_id_cache_for_type(
-    conn: sqlite3.Connection,
-    dataset_ids: list[int],
-    file_type_name: str,
-) -> dict[tuple[int, str], int]:
-    """(dataset_id, file_name) → file_id, filtered to one file type."""
-    if not dataset_ids:
-        return {}
-    ph = ",".join("?" * len(dataset_ids))
-    rows = conn.execute(
-        f"""
-        SELECT f.dataset_id, f.name, f.file_id
-        FROM files f
-        JOIN file_types ft ON ft.file_type_id = f.file_type_id
-        WHERE ft.name = ? AND f.dataset_id IN ({ph})
-        """,
-        [file_type_name, *dataset_ids],
-    ).fetchall()
-    return {(r[0], r[1]): r[2] for r in rows}
-
-# ============================================================================
-# Cached upsert helper
-# ============================================================================
-
-def get_or_create_cached(
-    conn: sqlite3.Connection,
-    cache: dict[str, int],
-    table: str,
-    pk_col: str,
-    lookup_col: str,
-    lookup_val: str,
-    extra_cols: dict | None = None,
-) -> int:
-    """
-    Return the PK for lookup_val from cache.
-    On cache miss: INSERT the row immediately (for lastrowid), update the
-    cache, and return the new PK.  No commit — the row rides with the next
-    batch commit.
-    """
-    if (pk := cache.get(lookup_val)) is not None:
-        return pk
-
-    cols = [lookup_col, *(extra_cols or {})]
-    vals = [lookup_val, *(extra_cols or {}).values()]
-    ph   = ", ".join("?" * len(vals))
-    pk   = conn.execute(
-        f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({ph})", vals
-    ).lastrowid
-    cache[lookup_val] = pk
-    return pk
-
-# ============================================================================
-# DataFrame pre-processors
-# All per-row work that can be vectorised is done here at C speed.
+# DataFrame loaders
+# Read only the columns we need; all normalisation done here in pandas
+# (vectorised, C speed) before any SQL runs.
 # ============================================================================
 
 def load_datasets_df(path: str) -> pd.DataFrame:
@@ -216,38 +97,34 @@ def load_datasets_df(path: str) -> pd.DataFrame:
         "keywords", "description",
     ])
     df = df.rename(columns={
-        "dataset_repository_name":  "data_source",
-        "dataset_id_in_repository": "id_in_data_source",
-        "date_last_updated":        "date_last_modified",
-        "date_last_fetched":        "date_last_crawled",
-        "number_of_files":          "file_number",
-        "dataset_url_in_repository":"url_in_data_source",
-        "author_names":             "author",
+        "dataset_repository_name":   "data_source",
+        "dataset_id_in_repository":  "id_in_data_source",
+        "date_last_updated":         "date_last_modified",
+        "date_last_fetched":         "date_last_crawled",
+        "number_of_files":           "file_number",
+        "dataset_url_in_repository": "url_in_data_source",
+        "author_names":              "author_list",
     })
 
-    # author_names is a Python list in the parquet (e.g. ["Smith, John", "Dong, Wei"]).
-    # Join into a comma-separated string here — itertuples() silently converts
-    # list columns to their string repr "['Smith, John']", destroying the structure.
-    # Splitting back into names happens in the ingestion loop instead.
-    df["author"] = df["author"].apply(
-        lambda x: ",".join(x) if isinstance(x, (list, tuple, np.ndarray)) else ""
+    # Normalise author_list to a Python list of strings
+    df["author_list"] = df["author_list"].apply(
+        lambda x: list(x) if isinstance(x, (list, tuple, np.ndarray)) else []
     )
 
-    # Keywords: normalise separators, lowercase
+    # Keywords: normalise separators, lowercase, empty → None
     df["keywords"] = (
         df["keywords"].fillna("").astype(str)
         .str.replace(", ", ",", regex=False)
         .str.replace("; ", ";", regex=False)
         .str.replace(",", ";", regex=False)
         .str.lower()
+        .where(lambda s: s != "", other=None)
     )
 
-    # Integer columns: coerce NaN → 0
     for col in ("file_number", "download_number", "view_number"):
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    # Nullable string columns: NaN → None for sqlite3 binding
-    for col in ("doi", "license", "description", "keywords", "url_in_data_source", "title"):
+    for col in ("doi", "license", "description", "url_in_data_source", "title"):
         df[col] = df[col].where(df[col].notna(), other=None)
 
     df["data_source_url"] = df["data_source"].map(SOURCE_URLS)
@@ -268,7 +145,7 @@ def load_files_df(path: str) -> pd.DataFrame:
         "file_size_in_bytes":           "size_in_bytes",
         "file_md5":                     "md5",
         "containing_archive_file_name": "parent_zip_file_name",
-        "file_type":                    "type",
+        "file_type":                    "file_type_name",
     })
     df["is_from_zip_file"] = df["parent_zip_file_name"].notna().astype(int)
     for col in ("size_in_bytes", "md5", "url", "parent_zip_file_name"):
@@ -323,386 +200,369 @@ def load_trajectory_df(path: str) -> pd.DataFrame:
     df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
     return df
 
+
 # ============================================================================
-# Ingestion — datasets
+# Pipeline — datasets
+#
+# All work happens in SQL after registering two DataFrame views:
+#   _stage_datasets  — one row per dataset (scalar fields)
+#   _stage_authors   — one row per (dataset, author) after exploding the list
+#
+# Steps:
+#   1. Upsert data_sources        — INSERT INTO ... SELECT DISTINCT
+#   2. Upsert authors             — INSERT INTO ... SELECT DISTINCT
+#   3. Insert new datasets        — INSERT INTO ... SELECT ... WHERE NOT EXISTS
+#   4. Update changed datasets    — UPDATE ... FROM view WHERE IS DISTINCT FROM
+#   5. Upsert datasets_authors_link — INSERT OR IGNORE INTO ... SELECT
 # ============================================================================
 
-def ingest_datasets(df: pd.DataFrame, conn: sqlite3.Connection) -> list[int]:
+def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[int]:
     """
-    Insert or update datasets, authors, data_sources, and datasets_authors_link.
-    Returns dataset_ids of all rows that were created or modified.
+    Bulk-upsert datasets, authors, data_sources, and datasets_authors_link.
+    Returns dataset_ids of all rows belonging to this source batch.
     """
-    source_cache  = load_data_source_cache(conn)
-    author_cache  = load_author_cache(conn)
-    dataset_cache = load_dataset_cache(conn)
-    da_cache      = load_dataset_authors_cache(conn)
+    # Build the author-exploded staging frame in pandas (fast, vectorised)
+    ds_stage = df.drop(columns=["author_list"]).copy()
+    author_stage = (
+        df[["id_in_data_source", "data_source", "author_list"]]
+        .explode("author_list")
+        .rename(columns={"author_list": "author_name"})
+        .dropna(subset=["author_name"])
+        .assign(author_name=lambda x: x["author_name"].str.strip())
+        .query("author_name != ''")
+    )
 
-    new_ids, modified_ids, unchanged_ids = [], [], []
-    pending       = 0
-    pending_links: list[tuple[int, int]] = []
+    # Register as DuckDB views — zero-copy, DuckDB reads the Arrow buffer directly
+    conn.register("_stage_datasets", ds_stage)
+    conn.register("_stage_authors",  author_stage)
 
-    for row in tqdm(df.itertuples(index=False), total=len(df), desc="Datasets", unit="row"):
+    # ── 1. Upsert data_sources ─────────────────────────────────────────────
+    conn.execute("""
+        INSERT INTO data_sources (name, url)
+        SELECT DISTINCT data_source, data_source_url
+        FROM _stage_datasets
+        WHERE data_source NOT IN (SELECT name FROM data_sources)
+    """)
 
-        source_id = get_or_create_cached(
-            conn, source_cache, "data_sources", "data_source_id", "name",
-            row.data_source,
-            extra_cols={"url": row.data_source_url, "citation": None, "comment": None},
+    # ── 2. Upsert authors ──────────────────────────────────────────────────
+    conn.execute("""
+        INSERT INTO authors (name)
+        SELECT DISTINCT author_name
+        FROM _stage_authors
+        WHERE author_name NOT IN (SELECT name FROM authors)
+    """)
+
+    # ── 3. Insert new datasets ─────────────────────────────────────────────
+    n_new = conn.execute("""
+        INSERT INTO datasets (
+            data_source_id, id_in_data_source, url_in_data_source,
+            doi, date_created, date_last_modified, date_last_crawled,
+            file_number, download_number, view_number,
+            license, title, description, keywords
         )
-
-        author_ids = [
-            get_or_create_cached(
-                conn, author_cache, "authors", "author_id", "name", name,
-                extra_cols={"orcid": None},
-            )
-            for name in [n.strip() for n in row.author.split(",") if n.strip()]
-        ]
-
-        cache_key = (source_id, row.id_in_data_source)
-        existing  = dataset_cache.get(cache_key)
-
-        if not existing:
-            dataset_id = conn.execute(
-                """
-                INSERT INTO datasets (
-                    data_source_id, id_in_data_source, url_in_data_source,
-                    doi, date_created, date_last_modified, date_last_crawled,
-                    file_number, download_number, view_number,
-                    license, title, description, keywords
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """,
-                (
-                    source_id, row.id_in_data_source, row.url_in_data_source,
-                    row.doi, row.date_created, row.date_last_modified,
-                    row.date_last_crawled, row.file_number,
-                    row.download_number, row.view_number,
-                    row.license, row.title, row.description, row.keywords,
-                ),
-            ).lastrowid
-
-            pending_links.extend((dataset_id, aid) for aid in author_ids)
-            dataset_cache[cache_key] = (
-                dataset_id, row.doi, row.date_created, row.date_last_modified,
-                row.date_last_crawled, row.file_number, row.url_in_data_source,
-                row.title, row.description, row.keywords,
-            )
-            da_cache[dataset_id] = set(author_ids)
-            new_ids.append(dataset_id)
-
-        else:
-            (dataset_id, db_doi, db_date_created, db_date_last_modified,
-             db_date_last_crawled, db_file_number, db_url,
-             db_title, db_description, db_keywords) = existing
-
-            fields_changed = (
-                db_doi                   != row.doi
-                or db_date_created       != row.date_created
-                or db_date_last_modified != row.date_last_modified
-                or db_date_last_crawled  != row.date_last_crawled
-                or db_file_number        != row.file_number
-                or db_url                != row.url_in_data_source
-                or db_title              != row.title
-                or db_description        != row.description
-                or db_keywords           != row.keywords
-            )
-            authors_changed = set(author_ids) != da_cache.get(dataset_id, set())
-
-            if fields_changed:
-                conn.execute(
-                    """
-                    UPDATE datasets SET
-                        doi = ?, date_created = ?, date_last_modified = ?,
-                        date_last_crawled = ?, file_number = ?,
-                        url_in_data_source = ?, title = ?,
-                        description = ?, keywords = ?
-                    WHERE dataset_id = ?
-                    """,
-                    (
-                        row.doi, row.date_created, row.date_last_modified,
-                        row.date_last_crawled, row.file_number,
-                        row.url_in_data_source, row.title,
-                        row.description, row.keywords, dataset_id,
-                    ),
-                )
-                dataset_cache[cache_key] = (
-                    dataset_id, row.doi, row.date_created, row.date_last_modified,
-                    row.date_last_crawled, row.file_number, row.url_in_data_source,
-                    row.title, row.description, row.keywords,
-                )
-
-            if authors_changed:
-                conn.execute(
-                    "DELETE FROM datasets_authors_link WHERE dataset_id = ?",
-                    (dataset_id,),
-                )
-                pending_links.extend((dataset_id, aid) for aid in author_ids)
-                da_cache[dataset_id] = set(author_ids)
-
-            if fields_changed or authors_changed:
-                modified_ids.append(dataset_id)
-            else:
-                unchanged_ids.append(dataset_id)
-
-        pending += 1
-        if pending >= BATCH_SIZE:
-            if pending_links:
-                conn.executemany(
-                    "INSERT OR IGNORE INTO datasets_authors_link "
-                    "(dataset_id, author_id) VALUES (?, ?)",
-                    pending_links,
-                )
-                pending_links = []
-            conn.commit()
-            pending = 0
-
-    # Final flush
-    if pending_links:
-        conn.executemany(
-            "INSERT OR IGNORE INTO datasets_authors_link "
-            "(dataset_id, author_id) VALUES (?, ?)",
-            pending_links,
+        SELECT
+            src.data_source_id,
+            s.id_in_data_source,
+            s.url_in_data_source,
+            s.doi,
+            s.date_created,
+            s.date_last_modified,
+            s.date_last_crawled,
+            s.file_number,
+            s.download_number,
+            s.view_number,
+            s.license,
+            s.title,
+            s.description,
+            s.keywords
+        FROM _stage_datasets s
+        JOIN data_sources src ON src.name = s.data_source
+        WHERE NOT EXISTS (
+            SELECT 1 FROM datasets d
+            WHERE d.data_source_id    = src.data_source_id
+              AND d.id_in_data_source = s.id_in_data_source
         )
-    if pending:
-        conn.commit()
+    """).fetchone()[0]
 
-    logger.success("Completed dataset ingestion.")
-    logger.info(f"Created: {len(new_ids)}  |  Updated: {len(modified_ids)}  |  Unchanged: {len(unchanged_ids)}")
-    return new_ids + modified_ids
+    # ── 4. Update changed datasets ─────────────────────────────────────────
+    # IS DISTINCT FROM handles NULL comparisons correctly (unlike !=)
+    n_updated = conn.execute("""
+        UPDATE datasets d
+        SET
+            doi                = s.doi,
+            date_created       = s.date_created,
+            date_last_modified = s.date_last_modified,
+            date_last_crawled  = s.date_last_crawled,
+            file_number        = s.file_number,
+            url_in_data_source = s.url_in_data_source,
+            title              = s.title,
+            description        = s.description,
+            keywords           = s.keywords
+        FROM _stage_datasets s
+        JOIN data_sources src ON src.name = s.data_source
+        WHERE d.data_source_id    = src.data_source_id
+          AND d.id_in_data_source = s.id_in_data_source
+          AND (
+                d.doi                IS DISTINCT FROM s.doi
+             OR d.date_created       IS DISTINCT FROM s.date_created
+             OR d.date_last_modified IS DISTINCT FROM s.date_last_modified
+             OR d.date_last_crawled  IS DISTINCT FROM s.date_last_crawled
+             OR d.file_number        IS DISTINCT FROM s.file_number
+             OR d.url_in_data_source IS DISTINCT FROM s.url_in_data_source
+             OR d.title              IS DISTINCT FROM s.title
+             OR d.description        IS DISTINCT FROM s.description
+             OR d.keywords           IS DISTINCT FROM s.keywords
+          )
+    """).fetchone()[0]
 
-# ============================================================================
-# Ingestion — files
-# ============================================================================
-
-def _delete_files_for_datasets(conn: sqlite3.Connection, dataset_ids: list[int]) -> None:
-    """Delete all files (and their simulation children) for the given datasets."""
-    if not dataset_ids:
-        return
-
-    CHUNK = 999  # SQLite hard limit on variables per query
-    file_ids = []
-    for i in range(0, len(dataset_ids), CHUNK):
-        chunk = dataset_ids[i : i + CHUNK]
-        ph    = ",".join("?" * len(chunk))
-        file_ids.extend(
-            r[0] for r in conn.execute(
-                f"SELECT file_id FROM files WHERE dataset_id IN ({ph})", chunk
-            ).fetchall()
-        )
-
-    if file_ids:
-        for i in range(0, len(file_ids), CHUNK):
-            chunk = file_ids[i : i + CHUNK]
-            ph    = ",".join("?" * len(chunk))
-            for table in ("topology_files", "parameter_files", "trajectory_files"):
-                conn.execute(f"DELETE FROM {table} WHERE file_id IN ({ph})", chunk)
-
-    for i in range(0, len(dataset_ids), CHUNK):
-        chunk = dataset_ids[i : i + CHUNK]
-        ph    = ",".join("?" * len(chunk))
-        conn.execute(f"DELETE FROM files WHERE dataset_id IN ({ph})", chunk)
+    # ── 5. Upsert datasets_authors_link ────────────────────────────────────
+    conn.execute("""
+        INSERT OR IGNORE INTO datasets_authors_link (dataset_id, author_id)
+        SELECT d.dataset_id, a.author_id
+        FROM _stage_authors sa
+        JOIN data_sources src ON src.name              = sa.data_source
+        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
+                             AND d.id_in_data_source   = sa.id_in_data_source
+        JOIN authors      a   ON a.name                = sa.author_name
+    """)
 
     conn.commit()
-    logger.info(f"Deleted existing files for {len(dataset_ids)} dataset(s).")
+    conn.unregister("_stage_datasets")
+    conn.unregister("_stage_authors")
+
+    # Return all dataset_ids for this source (used by the files pipeline)
+    source_names = df["data_source"].unique().tolist()
+    all_ids = [
+        r[0] for r in conn.execute("""
+            SELECT d.dataset_id
+            FROM datasets d
+            JOIN data_sources src ON src.data_source_id = d.data_source_id
+            WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
+        """, [source_names]).fetchall()
+    ]
+
+    n_total = len(all_ids)
+    logger.success(f"Datasets — total in DB: {n_total:,}  |  new: {n_new:,}  |  updated: {n_updated:,}")
+    return all_ids
+
+
+# ============================================================================
+# Pipeline — files
+#
+# Two-pass SQL strategy handles parent-zip references without Python loops:
+#   Pass 1 — insert all top-level files (is_from_zip_file = 0),
+#             including zip archives themselves.
+#   Pass 2 — insert zip-child files; parent_zip_file_id resolved via
+#             a self-join on files already inserted in pass 1.
+# ============================================================================
+
+def _delete_files_for_datasets(
+    conn: duckdb.DuckDBPyConnection,
+    dataset_ids: list[int],
+) -> None:
+    """Delete all files and their simulation children for the given datasets."""
+    if not dataset_ids:
+        return
+    for table in ("topology_files", "parameter_files", "trajectory_files"):
+        conn.execute(f"""
+            DELETE FROM {table}
+            WHERE file_id IN (
+                SELECT file_id FROM files
+                WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+            )
+        """, [dataset_ids])
+    conn.execute(
+        "DELETE FROM files WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))",
+        [dataset_ids],
+    )
+    conn.commit()
+    logger.info(f"Deleted existing files for {len(dataset_ids):,} dataset(s).")
 
 
 def ingest_files(
     df: pd.DataFrame,
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     dataset_ids: list[int],
 ) -> None:
-    """Insert file rows for the given dataset_ids."""
+    """Bulk-insert file rows for the given dataset_ids."""
     if not dataset_ids:
         logger.info("No datasets to process — skipping file ingestion.")
         return
 
-    eligible         = set(dataset_ids)
-    dataset_id_cache = load_dataset_id_cache(conn)
-    file_type_cache  = load_file_type_cache(conn)
-    existing_files   = load_file_existence_cache(conn, dataset_ids)
+    # Resolve dataset_id in pandas (vectorised map) then filter to eligible only
+    ds_map = {
+        (r[0], r[1]): r[2]
+        for r in conn.execute("""
+            SELECT src.name, d.id_in_data_source, d.dataset_id
+            FROM datasets d
+            JOIN data_sources src ON src.data_source_id = d.data_source_id
+        """).fetchall()
+    }
+    eligible = set(dataset_ids)
+    df = df.copy()
+    df["dataset_id"] = df.apply(
+        lambda r: ds_map.get((r["data_source"], r["dataset_id_in_data_source"])),
+        axis=1,
+    )
+    df = df[df["dataset_id"].isin(eligible)].reset_index(drop=True)
 
-    created = skipped = pending = 0
-    parent_cache: dict[tuple[int, str], int] = {}
+    if df.empty:
+        logger.info("No matching datasets found in files parquet — nothing to ingest.")
+        return
 
-    for row in tqdm(df.itertuples(index=False), total=len(df), desc="Files", unit="row"):
+    conn.register("_stage_files", df)
 
-        dataset_id = dataset_id_cache.get((row.data_source, row.dataset_id_in_data_source))
-        if dataset_id is None or dataset_id not in eligible:
-            skipped += 1
-            continue
+    # ── Upsert file_types ──────────────────────────────────────────────────
+    conn.execute("""
+        INSERT INTO file_types (name)
+        SELECT DISTINCT file_type_name
+        FROM _stage_files
+        WHERE file_type_name IS NOT NULL
+          AND file_type_name NOT IN (SELECT name FROM file_types)
+    """)
 
-        if (dataset_id, row.name) in existing_files:
-            skipped += 1
-            continue
-
-        file_type_id = get_or_create_cached(
-            conn, file_type_cache, "file_types", "file_type_id", "name", row.type,
-            extra_cols={"comment": None},
+    # ── Pass 1: top-level files (not inside a zip) ─────────────────────────
+    conn.execute("""
+        INSERT INTO files (
+            dataset_id, name, file_type_id, size_in_bytes,
+            md5, url, is_from_zip_file, parent_zip_file_id
         )
+        SELECT
+            s.dataset_id,
+            s.name,
+            ft.file_type_id,
+            s.size_in_bytes,
+            s.md5,
+            s.url,
+            s.is_from_zip_file,
+            NULL
+        FROM _stage_files s
+        JOIN file_types ft ON ft.name = s.file_type_name
+        WHERE s.is_from_zip_file = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM files f
+              WHERE f.dataset_id = s.dataset_id AND f.name = s.name
+          )
+    """)
 
-        parent_zip_file_id = None
-        if row.is_from_zip_file and row.parent_zip_file_name:
-            parent_zip_file_id = parent_cache.get((dataset_id, row.parent_zip_file_name))
-            if parent_zip_file_id is None:
-                logger.debug(
-                    f"Parent zip '{row.parent_zip_file_name}' not found "
-                    f"for '{row.name}' in dataset {dataset_id}."
-                )
+    # ── Pass 2: zip-child files — parent now exists from pass 1 ───────────
+    conn.execute("""
+        INSERT INTO files (
+            dataset_id, name, file_type_id, size_in_bytes,
+            md5, url, is_from_zip_file, parent_zip_file_id
+        )
+        SELECT
+            s.dataset_id,
+            s.name,
+            ft.file_type_id,
+            s.size_in_bytes,
+            s.md5,
+            s.url,
+            s.is_from_zip_file,
+            parent.file_id
+        FROM _stage_files s
+        JOIN file_types ft ON ft.name = s.file_type_name
+        LEFT JOIN files parent
+               ON parent.dataset_id = s.dataset_id
+              AND parent.name       = s.parent_zip_file_name
+        WHERE s.is_from_zip_file = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM files f
+              WHERE f.dataset_id = s.dataset_id AND f.name = s.name
+          )
+    """)
 
-        file_id = conn.execute(
-            """
-            INSERT INTO files (
-                dataset_id, name, file_type_id, size_in_bytes,
-                md5, url, is_from_zip_file, parent_zip_file_id
-            ) VALUES (?,?,?,?,?,?,?,?)
-            """,
-            (
-                dataset_id, row.name, file_type_id, row.size_in_bytes,
-                row.md5, row.url, row.is_from_zip_file, parent_zip_file_id,
-            ),
-        ).lastrowid
+    conn.commit()
+    conn.unregister("_stage_files")
 
-        existing_files.add((dataset_id, row.name))
-        created += 1
+    n = conn.execute("""
+        SELECT COUNT(*) FROM files
+        WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+    """, [dataset_ids]).fetchone()[0]
+    logger.success(f"Files ingested — {n:,} total rows for these datasets.")
 
-        if not row.is_from_zip_file and row.type == "zip":
-            parent_cache[(dataset_id, row.name)] = file_id
-
-        pending += 1
-        if pending >= BATCH_SIZE:
-            conn.commit()
-            pending = 0
-
-    if pending:
-        conn.commit()
-
-    logger.success("Completed file ingestion.")
-    logger.info(f"Created: {created}  |  Skipped: {skipped}")
 
 # ============================================================================
-# Ingestion — simulation files (topology / parameter / trajectory)
+# Pipeline — simulation files (topology / parameter / trajectory)
 #
-# Shared pattern for all three:
-#   1. Load dataset_id_cache and a type-filtered file_id_cache once.
-#   2. Single itertuples pass — zero SQL in the loop, pure dict lookups.
-#   3. One executemany() + one commit for the whole table.
+# All three: register DataFrame view → one INSERT INTO ... SELECT joining
+# against datasets and files. Zero Python loops, one SQL statement each.
 # ============================================================================
 
-def _referenced_dataset_ids(
-    df: pd.DataFrame,
-    dataset_id_cache: dict[tuple[str, str], int],
-) -> list[int]:
-    """Collect DB dataset_ids referenced in df in a single pass."""
-    return list({
-        did
-        for row in df.itertuples(index=False)
-        if (did := dataset_id_cache.get(
-            (row.data_source, row.dataset_id_in_data_source)
-        )) is not None
-    })
-
-
-def ingest_topology_files(df: pd.DataFrame, conn: sqlite3.Connection) -> None:
-    dataset_id_cache = load_dataset_id_cache(conn)
-    ref_ids          = _referenced_dataset_ids(df, dataset_id_cache)
-    file_id_cache    = load_file_id_cache_for_type(conn, ref_ids, "gro")
-
-    rows, missing = [], 0
-    for row in tqdm(df.itertuples(index=False), total=len(df), desc="Topology files", unit="row"):
-        dataset_id = dataset_id_cache.get((row.data_source, row.dataset_id_in_data_source))
-        file_id    = file_id_cache.get((dataset_id, row.name)) if dataset_id else None
-        if file_id is None:
-            missing += 1
-            continue
-        rows.append((
-            file_id, row.atom_number,
-            row.has_protein, row.has_nucleic, row.has_lipid,
-            row.has_glucid, row.has_water_ion,
-        ))
-
-    if rows:
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO topology_files (
-                file_id, atom_number, has_protein, has_nucleic,
-                has_lipid, has_glucid, has_water_ion
-            ) VALUES (?,?,?,?,?,?,?)
-            """,
-            rows,
+def ingest_topology_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+    conn.register("_stage_topo", df)
+    conn.execute("""
+        INSERT OR IGNORE INTO topology_files (
+            file_id, atom_number, has_protein, has_nucleic,
+            has_lipid, has_glucid, has_water_ion
         )
-        conn.commit()
+        SELECT f.file_id, s.atom_number, s.has_protein, s.has_nucleic,
+               s.has_lipid, s.has_glucid, s.has_water_ion
+        FROM _stage_topo s
+        JOIN data_sources src ON src.name              = s.data_source
+        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
+                             AND d.id_in_data_source   = s.dataset_id_in_data_source
+        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
+    """)
+    conn.commit()
+    conn.unregister("_stage_topo")
+    n = conn.execute("SELECT COUNT(*) FROM topology_files").fetchone()[0]
+    logger.success(f"Topology files — {n:,} total rows in DB.")
 
-    logger.success(f"Topology files — inserted: {len(rows)}  |  skipped: {missing}")
 
-
-def ingest_parameter_files(df: pd.DataFrame, conn: sqlite3.Connection) -> None:
-    dataset_id_cache = load_dataset_id_cache(conn)
-    ref_ids          = _referenced_dataset_ids(df, dataset_id_cache)
-    file_id_cache    = load_file_id_cache_for_type(conn, ref_ids, "mdp")
-
-    rows, missing = [], 0
-    for row in tqdm(df.itertuples(index=False), total=len(df), desc="Parameter files", unit="row"):
-        dataset_id = dataset_id_cache.get((row.data_source, row.dataset_id_in_data_source))
-        file_id    = file_id_cache.get((dataset_id, row.name)) if dataset_id else None
-        if file_id is None:
-            missing += 1
-            continue
-        rows.append((
-            file_id, row.dt, row.nsteps, row.temperature,
-            row.thermostat, row.barostat, row.integrator,
-        ))
-
-    if rows:
-        conn.executemany(
-            """
-            INSERT OR IGNORE INTO parameter_files (
-                file_id, dt, nsteps, temperature, thermostat, barostat, integrator
-            ) VALUES (?,?,?,?,?,?,?)
-            """,
-            rows,
+def ingest_parameter_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+    conn.register("_stage_param", df)
+    conn.execute("""
+        INSERT OR IGNORE INTO parameter_files (
+            file_id, dt, nsteps, temperature, thermostat, barostat, integrator
         )
-        conn.commit()
+        SELECT f.file_id, s.dt, s.nsteps, s.temperature,
+               s.thermostat, s.barostat, s.integrator
+        FROM _stage_param s
+        JOIN data_sources src ON src.name              = s.data_source
+        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
+                             AND d.id_in_data_source   = s.dataset_id_in_data_source
+        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
+    """)
+    conn.commit()
+    conn.unregister("_stage_param")
+    n = conn.execute("SELECT COUNT(*) FROM parameter_files").fetchone()[0]
+    logger.success(f"Parameter files — {n:,} total rows in DB.")
 
-    logger.success(f"Parameter files — inserted: {len(rows)}  |  skipped: {missing}")
 
+def ingest_trajectory_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+    conn.register("_stage_traj", df)
+    conn.execute("""
+        INSERT OR IGNORE INTO trajectory_files (file_id, atom_number, frame_number)
+        SELECT f.file_id, s.atom_number, s.frame_number
+        FROM _stage_traj s
+        JOIN data_sources src ON src.name              = s.data_source
+        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
+                             AND d.id_in_data_source   = s.dataset_id_in_data_source
+        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
+    """)
+    conn.commit()
+    conn.unregister("_stage_traj")
+    n = conn.execute("SELECT COUNT(*) FROM trajectory_files").fetchone()[0]
+    logger.success(f"Trajectory files — {n:,} total rows in DB.")
 
-def ingest_trajectory_files(df: pd.DataFrame, conn: sqlite3.Connection) -> None:
-    dataset_id_cache = load_dataset_id_cache(conn)
-    ref_ids          = _referenced_dataset_ids(df, dataset_id_cache)
-    file_id_cache    = load_file_id_cache_for_type(conn, ref_ids, "xtc")
-
-    rows, missing = [], 0
-    for row in tqdm(df.itertuples(index=False), total=len(df), desc="Trajectory files", unit="row"):
-        dataset_id = dataset_id_cache.get((row.data_source, row.dataset_id_in_data_source))
-        file_id    = file_id_cache.get((dataset_id, row.name)) if dataset_id else None
-        if file_id is None:
-            missing += 1
-            continue
-        rows.append((file_id, row.atom_number, row.frame_number))
-
-    if rows:
-        conn.executemany(
-            "INSERT OR IGNORE INTO trajectory_files "
-            "(file_id, atom_number, frame_number) VALUES (?,?,?)",
-            rows,
-        )
-        conn.commit()
-
-    logger.success(f"Trajectory files — inserted: {len(rows)}  |  skipped: {missing}")
 
 # ============================================================================
-# Parquet type auto-detection
+# Parquet type detection
 # ============================================================================
 
 def detect_parquet_type(path: Path) -> str:
     name = path.name.lower()
-    if "topology"             in name: return "topology"
-    if "parameter" in name or "mdp" in name: return "parameter"
+    if "topology"  in name:                   return "topology"
+    if "parameter" in name or "mdp" in name:  return "parameter"
     if "trajectory" in name or "xtc" in name: return "trajectory"
-    if "dataset"              in name: return "datasets"
-    if "file"                 in name: return "files"
+    if "dataset"   in name:                   return "datasets"
+    if "file"      in name:                   return "files"
     raise ValueError(
         f"Cannot detect parquet type from '{path.name}'. "
-        "Expected name to contain: dataset, file, topology, parameter, or trajectory."
+        "Filename must contain: dataset, file, topology, parameter, or trajectory."
     )
+
 
 # ============================================================================
 # Entry point
@@ -711,6 +571,7 @@ def detect_parquet_type(path: Path) -> str:
 def ingest(parquet_path: Path, db_path: Path) -> None:
     conn = get_connection(db_path)
     kind = detect_parquet_type(parquet_path)
+
     logger.info(f"Parquet type : {kind}")
     logger.info(f"Source file  : {parquet_path}")
     logger.info(f"Database     : {db_path.resolve()}")
@@ -719,37 +580,31 @@ def ingest(parquet_path: Path, db_path: Path) -> None:
         ingest_datasets(load_datasets_df(str(parquet_path)), conn)
 
     elif kind == "files":
-        df               = load_files_df(str(parquet_path))
-        dataset_id_cache = load_dataset_id_cache(conn)
+        df = load_files_df(str(parquet_path))
 
-        all_dataset_ids = list({
-            did
-            for row in df.itertuples(index=False)
-            if (did := dataset_id_cache.get(
-                (row.data_source, row.dataset_id_in_data_source)
-            )) is not None
-        })
+        source_names    = df["data_source"].unique().tolist()
+        all_dataset_ids = [
+            r[0] for r in conn.execute("""
+                SELECT d.dataset_id
+                FROM datasets d
+                JOIN data_sources src ON src.data_source_id = d.data_source_id
+                WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
+            """, [source_names]).fetchall()
+        ]
 
-        # Only re-ingest datasets that have no files yet.
-        # Datasets that already have files are considered up to date — skip them.
-        if all_dataset_ids:
-            CHUNK = 999
-            ids_with_files = set()
-            for i in range(0, len(all_dataset_ids), CHUNK):
-                chunk = all_dataset_ids[i : i + CHUNK]
-                ph    = ",".join("?" * len(chunk))
-                rows  = conn.execute(
-                    f"SELECT DISTINCT dataset_id FROM files WHERE dataset_id IN ({ph})",
-                    chunk,
-                ).fetchall()
-                ids_with_files.update(r[0] for r in rows)
+        ids_with_files = {
+            r[0] for r in conn.execute("""
+                SELECT DISTINCT dataset_id FROM files
+                WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+            """, [all_dataset_ids]).fetchall()
+        } if all_dataset_ids else set()
 
         new_dataset_ids = [d for d in all_dataset_ids if d not in ids_with_files]
 
         if not new_dataset_ids:
             logger.info("All datasets already have files — nothing to ingest.")
         else:
-            logger.info(f"{len(new_dataset_ids)} dataset(s) need file ingestion.")
+            logger.info(f"{len(new_dataset_ids):,} dataset(s) need file ingestion.")
             _delete_files_for_datasets(conn, new_dataset_ids)
             ingest_files(df, conn, dataset_ids=new_dataset_ids)
 
@@ -767,12 +622,12 @@ def ingest(parquet_path: Path, db_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Ingest a parquet file into the MDverse SQLite database.",
+        description="Ingest a parquet file into the MDverse DuckDB database.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    uv run ingest_data.py /mdverse_sandbox/data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data.py /mdverse_sandbox/data/zenodo/2026-02-16/zenodo_files.parquet
+    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_datasets.parquet
+    uv run ingest_data_duckdb.py data/zenodo/2026-02-16/zenodo_files.parquet
         """,
     )
     parser.add_argument("parquet", metavar="PARQUET_FILE", help="Path to the parquet file.")
@@ -780,7 +635,7 @@ Examples:
         "--db",
         metavar="PATH",
         default=str(DB_PATH),
-        help=f"Path to the SQLite database (default: {DB_PATH}).",
+        help=f"Path to the DuckDB database file (default: {DB_PATH}).",
     )
     args = parser.parse_args()
 
