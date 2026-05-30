@@ -1,31 +1,47 @@
-"""
-create_database.py
-------------------
-Creates the MDverse DuckDB database from database_schema.sql.
+"""Creates the MDverse DuckDB database using the provided SQL schema."""
 
-Usage:
-    uv run create_database.py --db database.duckdb
-    uv run create_database.py --db database.duckdb --schema params/database_schema.sql
-"""
-import duckdb
-import argparse
 from pathlib import Path
 
+import click
+import duckdb
+import loguru
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--db", required=True, help="Path to the DuckDB database file.")
-    parser.add_argument(
-        "--schema",
-        default=str(Path(__file__).parent.parent.parent.parent / "params" / "database_schema.sql"),
-        help="Path to the SQL schema file (default: params/database_schema.sql).",
-    )
-    args = parser.parse_args()
-    schema_sql = Path(args.schema).read_text()
-    conn = duckdb.connect(args.db)
+from mdverse.core.logger import create_logger
+
+
+def create_database(
+    db_path: Path, schema_path: Path, logger: "loguru.Logger" = loguru.logger
+) -> None:
+    """Create the MDverse database using the provided SQL schema."""
+    logger.info(f"Read SQL schema: {schema_path}")
+    schema_sql = schema_path.read_text(encoding="utf-8")
+    conn = duckdb.connect(db_path)
     conn.execute(schema_sql)
     conn.close()
-    print(f"OK | Database created: {args.db}")
+    logger.info(f"Database created: {db_path}")
+
+
+@click.command(
+    help="Create the MDverse database.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(exists=False, path_type=Path),
+    required=True,
+    help="Path to the DuckDB database file.",
+)
+@click.option(
+    "--schema",
+    "schema_path",
+    type=click.Path(exists=True, file_okay=True, path_type=Path),
+    required=True,
+    help="Path to the SQL schema file.",
+)
+def main(db_path: Path, schema_path: Path) -> None:
+    """Create database using the provided SQL schema."""
+    logger = create_logger(logpath="logs/create_database.log", level="INFO")
+    create_database(db_path=db_path, schema_path=schema_path, logger=logger)
 
 
 if __name__ == "__main__":
