@@ -483,8 +483,28 @@ def _delete_files_for_datasets(
         """,
         [dataset_ids],
     )
-    # for table in ("topology_files", "parameter_files", "trajectory_files"):
-
+    # Remove files for the parameter_files table.
+    conn.execute(
+        """
+        DELETE FROM parameter_files
+        WHERE file_id IN (
+            SELECT file_id FROM files
+            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+        )
+        """,
+        [dataset_ids],
+    )
+    # Remove files for the trajectory_files table.
+    conn.execute(
+        """
+        DELETE FROM trajectory_files
+        WHERE file_id IN (
+            SELECT file_id FROM files
+            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+        )
+        """,
+        [dataset_ids],
+    )
     conn.execute(
         "DELETE FROM files WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))",
         [dataset_ids],
