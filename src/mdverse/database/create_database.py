@@ -21,6 +21,15 @@ def create_database(
     logger.info(f"Database created: {db_path}")
 
 
+def list_tables(db_path: Path, logger: "loguru.Logger" = loguru.logger) -> None:
+    """List tables in the DuckDB database."""
+    conn = duckdb.connect(db_path)
+    results = conn.execute("SHOW TABLES").fetchall()
+    conn.close()
+    for row in results:
+        logger.info(f"Table created: {row[0]}")
+
+
 @click.command(
     help="Create the MDverse database.",
 )
@@ -40,8 +49,11 @@ def create_database(
 )
 def main(db_path: Path, schema_path: Path) -> None:
     """Create database using the provided SQL schema."""
-    logger = create_logger(logpath="logs/create_database.log", level="INFO")
+    logpath = Path("logs/create_database.log")
+    logger = create_logger(logpath=logpath, level="INFO")
     create_database(db_path=db_path, schema_path=schema_path, logger=logger)
+    list_tables(db_path=db_path, logger=logger)
+    logger.info(f"Log saved to {logpath}")
 
 
 if __name__ == "__main__":
