@@ -1,84 +1,51 @@
-"""
-ingest_data.py
----------------------
-Ingest parquet files into the MDverse DuckDB database.duckdb.
+"""Ingest scraped data into the MDverse database."""
 
-Prerequisites:
-    python create_database.py --db database.duckdb --schema params/database_schema.sql
-
-Usage:
-    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_files.parquet
-
-Performance strategy
---------------------
-Every pipeline avoids Python row-by-row loops for inserts. Instead:
-
-  Datasets  — DataFrame registered as a DuckDB in-memory view; all
-              INSERT / UPDATE / author-link operations are pure SQL joins.
-              Zero Python loops over individual rows.
-
-  Files     — same approach. Bulk INSERT INTO files SELECT ... FROM view
-              JOIN datasets. Parent-zip resolution is a SQL self-join (2 passes).
-"""
-
-import sys
-import argparse
 import time
 from datetime import timedelta
 from pathlib import Path
 
+import click
 import duckdb
+import loguru
 import numpy as np
 import pandas as pd
-from loguru import logger
 
+from mdverse.core.logger import create_logger
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-DB_PATH = Path(__file__).parent / "database.duckdb"
-
-SOURCE_URLS: dict[str, str] = {
-    "zenodo":              "https://zenodo.org/",
-    "figshare":            "https://figshare.com/",
-    "atlas":               "https://www.dsimb.inserm.fr/ATLAS/",
-    "nomad":               "https://nomad-lab.eu/",
-    "gpcrmd":              "https://www.gpcrmd.org/",
-    "mdposit_mmb_node":    "https://mmb.mddbr.eu/",
-    "mdposit_inria_node":  "https://dynarepo.inria.fr/",
+SOURCE_URLS = {
+    "zenodo": "https://zenodo.org/",
+    "figshare": "https://figshare.com/",
+    "atlas": "https://www.dsimb.inserm.fr/ATLAS/",
+    "nomad": "https://nomad-lab.eu/",
+    "gpcrmd": "https://www.gpcrmd.org/",
+    "mdposit_mmb_node": "https://mmb.mddbr.eu/",
+    "mdposit_inria_node": "https://dynarepo.inria.fr/",
     "mdposit_cineca_node": "https://cineca.mddbr.eu/",
 }
-
-
-# ============================================================================
-# Logging
-# ============================================================================
-
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="{time:MMMM D, YYYY - HH:mm:ss} | <lvl>{level:<8} | {message}</lvl>",
-    level="DEBUG",
-)
-logger.add(
-    f"{Path(__file__).stem}.log",
-    mode="w",
-    format="{time:YYYY-MM-DDTHH:mm:ss} | <lvl>{level:<8} | {message}</lvl>",
-    level="DEBUG",
-)
 
 
 # ============================================================================
 # Connection
 # ============================================================================
 
-def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
-    if not db_path.exists():
-        logger.error(f"Database not found: {db_path}")
-        logger.error("Run create_database.py first.")
-        sys.exit(1)
+
+def get_db_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
+    """Get a connection to the DuckDB database.
+
+    Parameters
+    ----------
+    db_path : Path
+        Path to the DuckDB database file.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+        A connection object to interact with the DuckDB database.
+    """
     return duckdb.connect(str(db_path))
 
 
@@ -88,37 +55,60 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
 # (vectorised, C speed) before any SQL runs.
 # ============================================================================
 
-def load_datasets_df(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path, columns=[
-        "dataset_repository_name", "dataset_id_in_repository",
-        "doi", "date_created", "date_last_updated", "date_last_fetched",
-        "number_of_files", "download_number", "view_number", "license",
-        "dataset_url_in_repository", "title", "author_names",
-        "keywords", "description",
-    ])
-    df = df.rename(columns={
-        "dataset_repository_name":   "data_source",
-        "dataset_id_in_repository":  "id_in_data_source",
-        "date_last_updated":         "date_last_modified",
-        "date_last_fetched":         "date_last_crawled",
-        "number_of_files":           "file_number",
-        "dataset_url_in_repository": "url_in_data_source",
-        "author_names":              "author_list",
-    })
 
-    # Normalise author_list to a Python list of strings
+def load_datasets_df(parquet_path: str) -> pd.DataFrame:
+    """Load parquet file into a Pandas dataframe for datasets metadata.
+
+    Parameters
+    ----------
+    parquet_path : str
+        Path to the parquet file containing the metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the datasets metadata.
+    """
+    df = pd.read_parquet(
+        parquet_path,
+        columns=[
+            "dataset_repository_name",
+            "dataset_id_in_repository",
+            "doi",
+            "date_created",
+            "date_last_updated",
+            "date_last_fetched",
+            "number_of_files",
+            "download_number",
+            "view_number",
+            "license",
+            "dataset_url_in_repository",
+            "title",
+            "author_names",
+            "keywords",
+            "description",
+        ],
+    )
+    # Rename columns to match the database schema.
+    df = df.rename(
+        columns={
+            "dataset_repository_name": "data_source",
+            "dataset_id_in_repository": "id_in_data_source",
+            "date_last_updated": "date_last_modified",
+            "date_last_fetched": "date_last_crawled",
+            "number_of_files": "file_number",
+            "dataset_url_in_repository": "url_in_data_source",
+            "author_names": "author_list",
+        }
+    )
+    # Flatten author list to a semicolon-separated string.
     df["author_list"] = df["author_list"].apply(
-        lambda x: list(x) if isinstance(x, (list, tuple, np.ndarray)) else []
+        lambda row: " ;".join(row) if isinstance(row, (list, tuple, np.ndarray)) else ""
     )
 
-    # Keywords: normalise separators, lowercase, empty → None
-    df["keywords"] = (
-        df["keywords"].fillna("").astype(str)
-        .str.replace(", ", ",", regex=False)
-        .str.replace("; ", ";", regex=False)
-        .str.replace(",", ";", regex=False)
-        .str.lower()
-        .where(lambda s: s != "", other=None)
+    # Flatten keywords list to a semicolon-separated string.
+    df["keywords"] = df["keywords"].apply(
+        lambda row: " ;".join(row) if isinstance(row, (list, tuple, np.ndarray)) else ""
     )
 
     for col in ("file_number", "download_number", "view_number"):
@@ -131,22 +121,44 @@ def load_datasets_df(path: str) -> pd.DataFrame:
     return df
 
 
-def load_files_df(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path, columns=[
-        "dataset_repository_name", "dataset_id_in_repository",
-        "file_name", "file_url_in_repository", "file_size_in_bytes",
-        "file_md5", "containing_archive_file_name", "file_type",
-    ])
-    df = df.rename(columns={
-        "dataset_repository_name":      "data_source",
-        "dataset_id_in_repository":     "dataset_id_in_data_source",
-        "file_name":                    "name",
-        "file_url_in_repository":       "url",
-        "file_size_in_bytes":           "size_in_bytes",
-        "file_md5":                     "md5",
-        "containing_archive_file_name": "parent_zip_file_name",
-        "file_type":                    "file_type_name",
-    })
+def load_files_df(parquet_path: str) -> pd.DataFrame:
+    """Load parquet file into a Pandas dataframe for files metadata.
+
+    Parameters
+    ----------
+    parquet_path : str
+        Path to the parquet file containing the files metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the files metadata.
+    """
+    df = pd.read_parquet(
+        parquet_path,
+        columns=[
+            "dataset_repository_name",
+            "dataset_id_in_repository",
+            "file_name",
+            "file_url_in_repository",
+            "file_size_in_bytes",
+            "file_md5",
+            "containing_archive_file_name",
+            "file_type",
+        ],
+    )
+    df = df.rename(
+        columns={
+            "dataset_repository_name": "data_source",
+            "dataset_id_in_repository": "dataset_id_in_data_source",
+            "file_name": "name",
+            "file_url_in_repository": "url",
+            "file_size_in_bytes": "size_in_bytes",
+            "file_md5": "md5",
+            "containing_archive_file_name": "parent_zip_file_name",
+            "file_type": "file_type_name",
+        }
+    )
     df["is_from_zip_file"] = df["parent_zip_file_name"].notna().astype(int)
     for col in ("size_in_bytes", "md5", "url", "parent_zip_file_name"):
         df[col] = df[col].where(df[col].notna(), other=None)
@@ -154,32 +166,85 @@ def load_files_df(path: str) -> pd.DataFrame:
 
 
 def load_topology_df(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path, columns=[
-        "dataset_origin", "dataset_id", "file_name",
-        "atom_number", "has_protein", "has_nucleic",
-        "has_lipid", "has_glucid", "has_water_ion",
-    ])
-    df = df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
-    for col in ("has_protein", "has_nucleic", "has_lipid", "has_glucid", "has_water_ion"):
+    """Load parquet file into a Pandas dataframe for topology files metadata.
+
+    Parameters
+    ----------
+    path : str
+        Path to the parquet file containing the topology files metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the topology files metadata.
+    """
+    df = pd.read_parquet(
+        path,
+        columns=[
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "atom_number",
+            "has_protein",
+            "has_nucleic",
+            "has_lipid",
+            "has_glucid",
+            "has_water_ion",
+        ],
+    )
+    df = df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
+    for col in (
+        "has_protein",
+        "has_nucleic",
+        "has_lipid",
+        "has_glucid",
+        "has_water_ion",
+    ):
         df[col] = df[col].astype(int)
     df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
     return df
 
 
 def load_parameter_df(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path, columns=[
-        "dataset_origin", "dataset_id", "file_name",
-        "dt", "nsteps", "temperature", "thermostat", "barostat", "integrator",
-    ])
-    df = df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
+    """Load parquet file into a Pandas dataframe for parameter files metadata.
+
+    Parameters
+    ----------
+    path : str
+        Path to the parquet file containing the parameter files metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the parameter files metadata.
+    """
+    df = pd.read_parquet(
+        path,
+        columns=[
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "dt",
+            "nsteps",
+            "temperature",
+            "thermostat",
+            "barostat",
+            "integrator",
+        ],
+    )
+    df = df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
     df["integrator"] = df["integrator"].fillna("undefined")
     for col in ("dt", "nsteps", "temperature", "thermostat", "barostat"):
         df[col] = df[col].where(df[col].notna(), other=None)
@@ -188,15 +253,35 @@ def load_parameter_df(path: str) -> pd.DataFrame:
 
 
 def load_trajectory_df(path: str) -> pd.DataFrame:
-    df = pd.read_parquet(path, columns=[
-        "dataset_origin", "dataset_id", "file_name",
-        "atom_number", "frame_number",
-    ])
-    df = df.rename(columns={
-        "dataset_origin": "data_source",
-        "dataset_id":     "dataset_id_in_data_source",
-        "file_name":      "name",
-    })
+    """Load parquet file into a Pandas dataframe for trajectory files metadata.
+
+    Parameters
+    ----------
+    path : str
+        Path to the parquet file containing the trajectory files metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe containing the trajectory files metadata.
+    """
+    df = pd.read_parquet(
+        path,
+        columns=[
+            "dataset_origin",
+            "dataset_id",
+            "file_name",
+            "atom_number",
+            "frame_number",
+        ],
+    )
+    df = df.rename(
+        columns={
+            "dataset_origin": "data_source",
+            "dataset_id": "dataset_id_in_data_source",
+            "file_name": "name",
+        }
+    )
     df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
     return df
 
@@ -216,10 +301,26 @@ def load_trajectory_df(path: str) -> pd.DataFrame:
 #   5. Upsert datasets_authors_link — INSERT OR IGNORE INTO ... SELECT
 # ============================================================================
 
-def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[int]:
-    """
-    Bulk-upsert datasets, authors, data_sources, and datasets_authors_link.
-    Returns dataset_ids of all rows belonging to this source batch.
+
+def ingest_datasets(
+    df: pd.DataFrame,
+    db_conn: duckdb.DuckDBPyConnection,
+    logger: "loguru.Logger" = loguru.logger,
+) -> list[int]:
+    """Ingest datasets from the given DataFrame into the database.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        A DataFrame containing the datasets metadata to be ingested.
+    db_conn : duckdb.DuckDBPyConnection
+        A connection to the DuckDB database.
+    logger : loguru.Logger, optional
+        A logger for logging messages.
+
+    Returns
+    -------
+    list[int]
     """
     # Build the author-exploded staging frame in pandas (fast, vectorised)
     ds_stage = df.drop(columns=["author_list"]).copy()
@@ -233,11 +334,11 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
     )
 
     # Register as DuckDB views — zero-copy, DuckDB reads the Arrow buffer directly
-    conn.register("_stage_datasets", ds_stage)
-    conn.register("_stage_authors",  author_stage)
+    db_conn.register("_stage_datasets", ds_stage)
+    db_conn.register("_stage_authors", author_stage)
 
     # ── 1. Upsert data_sources ─────────────────────────────────────────────
-    conn.execute("""
+    db_conn.execute("""
         INSERT INTO data_sources (name, url)
         SELECT DISTINCT data_source, data_source_url
         FROM _stage_datasets
@@ -245,7 +346,7 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
     """)
 
     # ── 2. Upsert authors ──────────────────────────────────────────────────
-    conn.execute("""
+    db_conn.execute("""
         INSERT INTO authors (name)
         SELECT DISTINCT author_name
         FROM _stage_authors
@@ -253,7 +354,7 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
     """)
 
     # ── 3. Insert new datasets ─────────────────────────────────────────────
-    n_new = conn.execute("""
+    n_new = db_conn.execute("""
         INSERT INTO datasets (
             data_source_id, id_in_data_source, url_in_data_source,
             doi, date_created, date_last_modified, date_last_crawled,
@@ -286,7 +387,7 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
 
     # ── 4. Update changed datasets ─────────────────────────────────────────
     # IS DISTINCT FROM handles NULL comparisons correctly (unlike !=)
-    n_updated = conn.execute("""
+    n_updated = db_conn.execute("""
         UPDATE datasets d
         SET
             doi                = s.doi,
@@ -316,7 +417,7 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
     """).fetchone()[0]
 
     # ── 5. Upsert datasets_authors_link ────────────────────────────────────
-    conn.execute("""
+    db_conn.execute("""
         INSERT OR IGNORE INTO datasets_authors_link (dataset_id, author_id)
         SELECT d.dataset_id, a.author_id
         FROM _stage_authors sa
@@ -326,23 +427,29 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
         JOIN authors      a   ON a.name                = sa.author_name
     """)
 
-    conn.commit()
-    conn.unregister("_stage_datasets")
-    conn.unregister("_stage_authors")
+    db_conn.commit()
+    db_conn.unregister("_stage_datasets")
+    db_conn.unregister("_stage_authors")
 
     # Return all dataset_ids for this source (used by the files pipeline)
     source_names = df["data_source"].unique().tolist()
     all_ids = [
-        r[0] for r in conn.execute("""
+        r[0]
+        for r in db_conn.execute(
+            """
             SELECT d.dataset_id
             FROM datasets d
             JOIN data_sources src ON src.data_source_id = d.data_source_id
             WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
-        """, [source_names]).fetchall()
+        """,
+            [source_names],
+        ).fetchall()
     ]
 
     n_total = len(all_ids)
-    logger.success(f"Datasets — total in DB: {n_total:,}  |  new: {n_new:,}  |  updated: {n_updated:,}")
+    logger.success(
+        f"Total datasets: {n_total:,} | new: {n_new:,} | updated: {n_updated:,}"
+    )
     return all_ids
 
 
@@ -356,21 +463,28 @@ def ingest_datasets(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> list[i
 #             a self-join on files already inserted in pass 1.
 # ============================================================================
 
+
 def _delete_files_for_datasets(
     conn: duckdb.DuckDBPyConnection,
     dataset_ids: list[int],
+    logger: "loguru.Logger" = loguru.logger,
 ) -> None:
     """Delete all files and their simulation children for the given datasets."""
     if not dataset_ids:
         return
-    for table in ("topology_files", "parameter_files", "trajectory_files"):
-        conn.execute(f"""
-            DELETE FROM {table}
-            WHERE file_id IN (
-                SELECT file_id FROM files
-                WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-            )
-        """, [dataset_ids])
+    # Remove files for the topology_files table.
+    conn.execute(
+        """
+        DELETE FROM topology_files
+        WHERE file_id IN (
+            SELECT file_id FROM files
+            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
+        )
+        """,
+        [dataset_ids],
+    )
+    # for table in ("topology_files", "parameter_files", "trajectory_files"):
+
     conn.execute(
         "DELETE FROM files WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))",
         [dataset_ids],
@@ -383,6 +497,7 @@ def ingest_files(
     df: pd.DataFrame,
     conn: duckdb.DuckDBPyConnection,
     dataset_ids: list[int],
+    logger: "loguru.Logger" = loguru.logger,
 ) -> None:
     """Bulk-insert file rows for the given dataset_ids."""
     if not dataset_ids:
@@ -475,10 +590,13 @@ def ingest_files(
     conn.commit()
     conn.unregister("_stage_files")
 
-    n = conn.execute("""
+    n = conn.execute(
+        """
         SELECT COUNT(*) FROM files
         WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-    """, [dataset_ids]).fetchone()[0]
+    """,
+        [dataset_ids],
+    ).fetchone()[0]
     logger.success(f"Files ingested — {n:,} total rows for these datasets.")
 
 
@@ -489,7 +607,13 @@ def ingest_files(
 # against datasets and files. Zero Python loops, one SQL statement each.
 # ============================================================================
 
-def ingest_topology_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+
+def ingest_topology_files(
+    df: pd.DataFrame,
+    conn: duckdb.DuckDBPyConnection,
+    logger: "loguru.Logger" = loguru.logger,
+) -> None:
+    """Ingest topology files from the given DataFrame into the database."""
     conn.register("_stage_topo", df)
     conn.execute("""
         INSERT OR IGNORE INTO topology_files (
@@ -510,7 +634,12 @@ def ingest_topology_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> 
     logger.success(f"Topology files — {n:,} total rows in DB.")
 
 
-def ingest_parameter_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+def ingest_parameter_files(
+    df: pd.DataFrame,
+    conn: duckdb.DuckDBPyConnection,
+    logger: "loguru.Logger" = loguru.logger,
+) -> None:
+    """Ingest parameter files from the given DataFrame into the database."""
     conn.register("_stage_param", df)
     conn.execute("""
         INSERT OR IGNORE INTO parameter_files (
@@ -530,7 +659,12 @@ def ingest_parameter_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) ->
     logger.success(f"Parameter files — {n:,} total rows in DB.")
 
 
-def ingest_trajectory_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -> None:
+def ingest_trajectory_files(
+    df: pd.DataFrame,
+    conn: duckdb.DuckDBPyConnection,
+    logger: "loguru.Logger" = loguru.logger,
+) -> None:
+    """Ingest trajectory files from the given DataFrame into the database."""
     conn.register("_stage_traj", df)
     conn.execute("""
         INSERT OR IGNORE INTO trajectory_files (file_id, atom_number, frame_number)
@@ -548,56 +682,57 @@ def ingest_trajectory_files(df: pd.DataFrame, conn: duckdb.DuckDBPyConnection) -
 
 
 # ============================================================================
-# Parquet type detection
-# ============================================================================
-
-def detect_parquet_type(path: Path) -> str:
-    name = path.name.lower()
-    if "topology"  in name:                   return "topology"
-    if "parameter" in name or "mdp" in name:  return "parameter"
-    if "trajectory" in name or "xtc" in name: return "trajectory"
-    if "dataset"   in name:                   return "datasets"
-    if "file"      in name:                   return "files"
-    raise ValueError(
-        f"Cannot detect parquet type from '{path.name}'. "
-        "Filename must contain: dataset, file, topology, parameter, or trajectory."
-    )
-
-
-# ============================================================================
 # Entry point
 # ============================================================================
 
-def ingest(parquet_path: Path, db_path: Path) -> None:
-    conn = get_connection(db_path)
-    kind = detect_parquet_type(parquet_path)
 
-    logger.info(f"Parquet type : {kind}")
-    logger.info(f"Source file  : {parquet_path}")
-    logger.info(f"Database     : {db_path.resolve()}")
+def ingest(
+    db_path: Path,
+    data_type: str,
+    parquet_path: Path,
+    logger: "loguru.Logger" = loguru.logger,
+) -> None:
+    """Ingest data into the MDverse database."""
+    db_conn = get_db_connection(db_path)
 
-    if kind == "datasets":
-        ingest_datasets(load_datasets_df(str(parquet_path)), conn)
+    logger.info(f"Data type  : {data_type}")
+    logger.info(f"Source file: {parquet_path}")
+    logger.info(f"Database   : {db_path.resolve()}")
 
-    elif kind == "files":
+    if data_type == "datasets":
+        ingest_datasets(load_datasets_df(str(parquet_path)), db_conn)
+
+    elif data_type == "files":
         df = load_files_df(str(parquet_path))
 
-        source_names    = df["data_source"].unique().tolist()
+        source_names = df["data_source"].unique().tolist()
         all_dataset_ids = [
-            r[0] for r in conn.execute("""
+            r[0]
+            for r in db_conn.execute(
+                """
                 SELECT d.dataset_id
                 FROM datasets d
                 JOIN data_sources src ON src.data_source_id = d.data_source_id
                 WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
-            """, [source_names]).fetchall()
+            """,
+                [source_names],
+            ).fetchall()
         ]
 
-        ids_with_files = {
-            r[0] for r in conn.execute("""
+        ids_with_files = (
+            {
+                r[0]
+                for r in db_conn.execute(
+                    """
                 SELECT DISTINCT dataset_id FROM files
                 WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-            """, [all_dataset_ids]).fetchall()
-        } if all_dataset_ids else set()
+            """,
+                    [all_dataset_ids],
+                ).fetchall()
+            }
+            if all_dataset_ids
+            else set()
+        )
 
         new_dataset_ids = [d for d in all_dataset_ids if d not in ids_with_files]
 
@@ -605,51 +740,58 @@ def ingest(parquet_path: Path, db_path: Path) -> None:
             logger.info("All datasets already have files — nothing to ingest.")
         else:
             logger.info(f"{len(new_dataset_ids):,} dataset(s) need file ingestion.")
-            _delete_files_for_datasets(conn, new_dataset_ids)
-            ingest_files(df, conn, dataset_ids=new_dataset_ids)
+            _delete_files_for_datasets(db_conn, new_dataset_ids)
+            ingest_files(df, db_conn, dataset_ids=new_dataset_ids)
 
-    elif kind == "topology":
-        ingest_topology_files(load_topology_df(str(parquet_path)), conn)
+    elif data_type == "topology":
+        ingest_topology_files(load_topology_df(str(parquet_path)), db_conn)
 
-    elif kind == "parameter":
-        ingest_parameter_files(load_parameter_df(str(parquet_path)), conn)
+    elif data_type == "parameter":
+        ingest_parameter_files(load_parameter_df(str(parquet_path)), db_conn)
 
-    elif kind == "trajectory":
-        ingest_trajectory_files(load_trajectory_df(str(parquet_path)), conn)
+    elif data_type == "trajectory":
+        ingest_trajectory_files(load_trajectory_df(str(parquet_path)), db_conn)
 
-    conn.close()
+    db_conn.close()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Ingest a parquet file into the MDverse DuckDB database.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_datasets.parquet
-    uv run ingest_data.py data/zenodo/2026-02-16/zenodo_files.parquet
-        """,
-    )
-    parser.add_argument("parquet", metavar="PARQUET_FILE", help="Path to the parquet file.")
-    parser.add_argument(
-        "--db",
-        metavar="PATH",
-        default=str(DB_PATH),
-        help=f"Path to the DuckDB database file (default: {DB_PATH}).",
-    )
-    args = parser.parse_args()
-
-    parquet_path = Path(args.parquet)
-    db_path      = Path(args.db)
-
-    if not parquet_path.exists():
-        logger.error(f"Parquet file not found: {parquet_path}")
-        sys.exit(1)
-
-    start = time.perf_counter()
-    ingest(parquet_path, db_path)
-    elapsed = str(timedelta(seconds=time.perf_counter() - start)).split(".")[0]
-    logger.info(f"Total time: {elapsed}")
+@click.command(
+    help="Ingest data into the MDverse database.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(exists=True, file_okay=True, path_type=Path),
+    required=True,
+    help="Path to the DuckDB database file.",
+)
+@click.option(
+    "--parquet",
+    "parquet_path",
+    type=click.Path(exists=True, file_okay=True, path_type=Path),
+    required=True,
+    help="Path to the parquet file.",
+)
+@click.option(
+    "--type",
+    "data_type",
+    type=click.Choice(
+        ["datasets", "files", "topology", "parameter", "trajectory"],
+        case_sensitive=False,
+    ),
+    required=True,
+    help="Define data type to be ingested.",
+)
+def main(db_path: Path, parquet_path: Path, data_type: str) -> None:
+    """Ingest data into the MDverse database."""
+    logpath = Path("logs/ingest_data_into_database.log")
+    logger = create_logger(logpath=logpath, level="INFO")
+    start_time = time.perf_counter()
+    ingest(db_path, data_type, parquet_path, logger=logger)
+    elapsed_time = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[
+        0
+    ]
+    logger.info(f"Total time: {elapsed_time}")
     logger.success("Done.")
 
 

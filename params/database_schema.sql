@@ -1,78 +1,70 @@
--- ================================================================
--- database_schema_duckdb.sql
--- MDverse database schema — single source of truth.
---
--- ALL CREATE TABLE and CREATE INDEX statements live here.
--- No SQL is defined anywhere else.
---
--- This file is read and executed by create_database_duckdb.py.
--- It can also be executed directly from the DuckDB CLI:
---     duckdb database.duckdb < database_schema_duckdb.sql
--- ================================================================
+-- MDverse database schema
 
--- ── Lookup / Type Tables ──────────────────────────────────────
+-- Lookup / Type tables
 -- No foreign keys — created first, safe to reference immediately.
 
-CREATE SEQUENCE IF NOT EXISTS file_types_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS file_type_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS file_types (
-    file_type_id  INTEGER PRIMARY KEY DEFAULT nextval('file_types_seq'),
+    file_type_id  INTEGER PRIMARY KEY DEFAULT nextval('file_type_id_sequence'),
     name          VARCHAR    NOT NULL UNIQUE,
     comment       VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS molecule_types_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS molecule_type_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS molecule_types (
-    molecule_type_id  INTEGER PRIMARY KEY DEFAULT nextval('molecule_types_seq'),
+    molecule_type_id  INTEGER PRIMARY KEY DEFAULT nextval('molecule_type_id_sequence'),
     name              VARCHAR    NOT NULL UNIQUE,
     comment           VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS databases_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS database_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS databases (
-    database_id  INTEGER PRIMARY KEY DEFAULT nextval('databases_seq'),
+    database_id  INTEGER PRIMARY KEY DEFAULT nextval('database_id_sequence'),
     name         VARCHAR    NOT NULL UNIQUE,
     url          VARCHAR,
     comment      VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS data_sources_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS data_source_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS data_sources (
-    data_source_id  INTEGER PRIMARY KEY DEFAULT nextval('data_sources_seq'),
+    data_source_id  INTEGER PRIMARY KEY DEFAULT nextval('data_source_id_sequence'),
     name            VARCHAR    NOT NULL UNIQUE,
     url             VARCHAR,
     citation        VARCHAR,
     comment         VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS provenance_types_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS provenance_type_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS provenance_types (
-    provenance_id  INTEGER PRIMARY KEY DEFAULT nextval('provenance_types_seq'),
+    provenance_id  INTEGER PRIMARY KEY DEFAULT nextval('provenance_type_id_sequence'),
     name           VARCHAR    NOT NULL UNIQUE,
     comment        VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS annotation_types_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS annotation_type_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS annotation_types (
-    annotation_type_id  INTEGER PRIMARY KEY DEFAULT nextval('annotation_types_seq'),
+    annotation_type_id  INTEGER PRIMARY KEY DEFAULT nextval('annotation_type_id_sequence'),
     label               VARCHAR    NOT NULL,
     name                VARCHAR    NOT NULL,
     comment             VARCHAR,
     UNIQUE (name, label)
 );
 
--- ── Main Tables ───────────────────────────────────────────────
+---------------------------------------------------------------------
+-- Main tables
+---------------------------------------------------------------------
 
-CREATE SEQUENCE IF NOT EXISTS authors_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS author_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS authors (
-    author_id  INTEGER PRIMARY KEY DEFAULT nextval('authors_seq'),
+    author_id  INTEGER PRIMARY KEY DEFAULT nextval('author_id_sequence'),
     name       VARCHAR    NOT NULL,
     orcid      VARCHAR,
     UNIQUE (name, orcid)
 );
 
-CREATE SEQUENCE IF NOT EXISTS papers_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS paper_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS papers (
-    paper_id  INTEGER PRIMARY KEY DEFAULT nextval('papers_seq'),
+    paper_id  INTEGER PRIMARY KEY DEFAULT nextval('paper_id_sequence'),
     doi       VARCHAR,
     title     VARCHAR    NOT NULL,
     abstract  VARCHAR,
@@ -82,18 +74,18 @@ CREATE TABLE IF NOT EXISTS papers (
     keywords  VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS projects_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS project_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS projects (
-    project_id  INTEGER PRIMARY KEY DEFAULT nextval('projects_seq'),
+    project_id  INTEGER PRIMARY KEY DEFAULT nextval('project_id_sequence'),
     name        VARCHAR    NOT NULL UNIQUE,
     url         VARCHAR    NOT NULL,
     comment     VARCHAR,
     citation    VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS datasets_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS dataset_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS datasets (
-    dataset_id          INTEGER PRIMARY KEY DEFAULT nextval('datasets_seq'),
+    dataset_id          INTEGER PRIMARY KEY DEFAULT nextval('dataset_id_sequence'),
     data_source_id      INTEGER NOT NULL REFERENCES data_sources (data_source_id),
     id_in_data_source   VARCHAR    NOT NULL,
     url_in_data_source  VARCHAR,
@@ -113,9 +105,9 @@ CREATE TABLE IF NOT EXISTS datasets (
     keywords            VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS files_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS file_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS files (
-    file_id             INTEGER PRIMARY KEY DEFAULT nextval('files_seq'),
+    file_id             INTEGER PRIMARY KEY DEFAULT nextval('file_id_sequence'),
     dataset_id          INTEGER NOT NULL REFERENCES datasets (dataset_id),
     name                VARCHAR    NOT NULL,
     file_type_id        INTEGER NOT NULL REFERENCES file_types (file_type_id),
@@ -126,9 +118,9 @@ CREATE TABLE IF NOT EXISTS files (
     parent_zip_file_id  INTEGER REFERENCES files (file_id)
 );
 
-CREATE SEQUENCE IF NOT EXISTS annotations_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS annotation_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS annotations (
-    annotation_id       INTEGER PRIMARY KEY DEFAULT nextval('annotations_seq'),
+    annotation_id       INTEGER PRIMARY KEY DEFAULT nextval('annotation_id_sequence'),
     dataset_id          INTEGER NOT NULL REFERENCES datasets (dataset_id),
     provenance_type_id  INTEGER NOT NULL REFERENCES provenance_types (provenance_id),
     annotation_type_id  INTEGER NOT NULL REFERENCES annotation_types (annotation_type_id),
@@ -140,9 +132,9 @@ CREATE TABLE IF NOT EXISTS annotations (
     comment             VARCHAR
 );
 
-CREATE SEQUENCE IF NOT EXISTS molecules_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS molecule_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS molecules (
-    molecule_id       INTEGER PRIMARY KEY DEFAULT nextval('molecules_seq'),
+    molecule_id       INTEGER PRIMARY KEY DEFAULT nextval('molecule_id_sequence'),
     annotation_id     INTEGER NOT NULL REFERENCES annotations (annotation_id),
     name              VARCHAR    NOT NULL,
     formula           VARCHAR    NOT NULL,
@@ -150,7 +142,7 @@ CREATE TABLE IF NOT EXISTS molecules (
     molecule_type_id  INTEGER REFERENCES molecule_types (molecule_type_id)
 );
 
--- ── Simulation File Tables ────────────────────────────────────
+-- Simulation files tables
 
 CREATE TABLE IF NOT EXISTS topology_files (
     file_id        INTEGER PRIMARY KEY REFERENCES files (file_id),
@@ -178,16 +170,16 @@ CREATE TABLE IF NOT EXISTS trajectory_files (
     frame_number  INTEGER NOT NULL
 );
 
-CREATE SEQUENCE IF NOT EXISTS molecules_external_db_seq START 1;
+CREATE SEQUENCE IF NOT EXISTS molecules_external_db_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS molecules_external_db (
-    mol_ext_db_id       INTEGER PRIMARY KEY DEFAULT nextval('molecules_external_db_seq'),
+    mol_ext_db_id       INTEGER PRIMARY KEY DEFAULT nextval('molecules_external_db_id_sequence'),
     molecule_id         INTEGER NOT NULL REFERENCES molecules (molecule_id),
     db_name             VARCHAR    NOT NULL,
     id_in_external_db   VARCHAR    NOT NULL,
     database_id         INTEGER REFERENCES databases (database_id)
 );
 
--- ── Indexes ───────────────────────────────────────────────────
+-- Indexes for faster queries
 
 CREATE INDEX IF NOT EXISTS idx_files_is_from_zip_file
     ON files (is_from_zip_file);
@@ -195,7 +187,8 @@ CREATE INDEX IF NOT EXISTS idx_files_is_from_zip_file
 CREATE INDEX IF NOT EXISTS idx_mol_ext_db_db_name
     ON molecules_external_db (db_name);
 
--- ── Many-to-Many Link Tables ──────────────────────────────────
+
+-- Many-to-Many tables
 
 CREATE TABLE IF NOT EXISTS datasets_authors_link (
     dataset_id  INTEGER NOT NULL REFERENCES datasets (dataset_id),

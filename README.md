@@ -220,37 +220,28 @@ uv run scripts/upload_datasets_to_zenodo.py --record 7856524 \
 ### Create the empty database
 
 ```sh
-uv run database-create
+uv run database-create --db data/database.duckdb --schema params/database_schema.sql
 ```
 
-This command reads the schema from `params/database_schema.sql` and creates
-a new DuckDB database file (`database.duckdb`).
+This command reads the schema from `params/database_schema.sql` and creates a new DuckDB database file (`database.duckdb`).
 
-You can also specify custom paths:
+### Ingest scraped data
+
+First ingest all `datasets`. For instance, for Zenodo data repository:
 
 ```sh
-uv run src/mdverse/database/create_database.py --db database.duckdb --schema params/database_schema.sql
+uv run database-ingest --db data/database.duckdb --type datasets --parquet /path/to/sraped_data/zenodo_datasets.parquet
 ```
 
-### Ingest datasets (all sources)
+This populates the `datasets`, `authors`, and `data_sources` tables.
 
-Run the datasets parquet for each source first. This populates the `datasets`,
-`authors`, and `data_sources` tables.
+Then, ingest all `files`. For instance, for Zenodo data repository:
 
 ```sh
-uv run database-ingest /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_datasets.parquet
-# same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
+uv run database-ingest -db data/database.duckdb --type files --parquet /path/to/scraped_data/zenodo_files.parquet
 ```
 
-### Ingest files (all sources)
-
-Once all datasets are ingested, run the files parquet for each source.
 This populates the `files` and `file_types` tables.
-
-```sh
-uv run database-ingest /path/to/mdverse_sandbox/data/atlas/2026-02-18/atlas_files.parquet
-# same pattern applies to figshare, nomad, gpcrmd, mddb, zenodo
-```
 
 ### Verify the database
 
