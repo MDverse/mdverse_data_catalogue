@@ -197,7 +197,7 @@ class DatasetMetadata(DatasetCoreMetadata):
         "keywords",
         "external_links",
         "license",
-        "author_names",
+        "authors",
         mode="before",
     )
     @classmethod

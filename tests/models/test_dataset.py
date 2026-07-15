@@ -146,14 +146,14 @@ def test_dataset_metadata_full_scenario():
         title="Full Test Dataset",
         description="",
         keywords=[],
-        author_names=[],
+        authors=[],
         external_links=[],
         license="",
     )
     # Check that empty fields are converted to None.
     assert metadata.description is None
     assert metadata.keywords is None
-    assert metadata.author_names is None
+    assert metadata.authors is None
     assert metadata.external_links is None
     assert metadata.license is None
     # Check that project fields are filled
