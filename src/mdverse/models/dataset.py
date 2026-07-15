@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from src.mdverse.models.person import Person
+from mdverse.models.person import Person
 
 from .date import DATETIME_FORMAT
 from .enums import DatasetSourceName
