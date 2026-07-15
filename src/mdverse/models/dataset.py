@@ -57,7 +57,7 @@ class DatasetCoreMetadata(BaseModel):
 # =====================================================================
 # Dataset-level metadata
 # =====================================================================
-class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
+class DatasetMetadata(DatasetCoreMetadata):
     """
     Base Pydantic model for molecular dynamics datasets.
 
@@ -135,6 +135,10 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
     external_links: list[str] | None = Field(
         None,
         description="External links to publications or other databases.",
+    )
+    simulation: SimulationMetadata | None = Field(
+        None,
+        description="Simulation metadata associated with the dataset.",
     )
 
     # ------------------------------------------------------------------
