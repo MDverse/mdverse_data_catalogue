@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from src.mdverse.models.person import Person
+
 from .date import DATETIME_FORMAT
 from .enums import DatasetSourceName
 from .simulation import SimulationMetadata
@@ -110,9 +112,9 @@ class DatasetMetadata(DatasetCoreMetadata):
         ...,
         description="Title of the dataset.",
     )
-    author_names: list[str] | None = Field(
+    authors: list[Person] | None = Field(
         None,
-        description="List of author or contributor names.",
+        description="List of authors associated with the dataset.",
     )
     description: str | None = Field(
         None,
