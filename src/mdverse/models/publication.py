@@ -2,8 +2,8 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.mdverse.models.person import Person
-from src.mdverse.models.simulation import SimulationMetadata
+from mdverse.models.person import Person
+from mdverse.models.simulation import SimulationMetadata
 
 
 class Publication(BaseModel):
