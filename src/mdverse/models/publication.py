@@ -12,13 +12,15 @@ class Publication(BaseModel):
     # Ensure scraped metadata matches the expected schema exactly.
     model_config = ConfigDict(extra="forbid")
 
-    doi: str = Field(..., description="Digital Object Identifier of the publication.")
+    doi: str | None = Field(
+        None, description="Digital Object Identifier of the publication."
+    )
     title: str = Field(..., description="Title of the publication.")
-    authors: list[Person] = Field(
-        ..., description="List of authors of the publication."
+    authors: list[Person] | None = Field(
+        None, description="List of authors of the publication."
     )
     year: str = Field(..., description="Year of publication in YYYY format.")
-    url: str = Field(..., description="URL to access the publication.")
+    url: str | None = Field(None, description="URL to access the publication.")
     abstract: str | None = Field(None, description="Abstract of the publication.")
     keywords: list[str] | None = Field(
         None, description="List of keywords associated with the publication."
