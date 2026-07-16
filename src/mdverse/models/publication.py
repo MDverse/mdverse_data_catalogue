@@ -6,7 +6,7 @@ from mdverse.models.person import Person
 from mdverse.models.simulation import SimulationMetadata
 
 
-class Publication(BaseModel):
+class PublicationMetadata(BaseModel):
     """Base Pydantic model for molecular dynamics publications."""
 
     # Ensure scraped metadata matches the expected schema exactly.
