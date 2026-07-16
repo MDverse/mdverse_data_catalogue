@@ -16,14 +16,15 @@ class PublicationMetadata(BaseModel):
         None, description="Digital Object Identifier of the publication."
     )
     title: str = Field(..., description="Title of the publication.")
-    authors: list[Person] | None = Field(
-        None, description="List of authors of the publication."
+    authors: list[Person] = Field(
+        default_factory=list, description="List of authors of the publication."
     )
     year: str = Field(..., description="Year of publication in YYYY format.")
     url: str | None = Field(None, description="URL to access the publication.")
     abstract: str | None = Field(None, description="Abstract of the publication.")
-    keywords: list[str] | None = Field(
-        None, description="List of keywords associated with the publication."
+    keywords: list[str] = Field(
+        default_factory=list,
+        description="List of keywords associated with the publication.",
     )
     simulation: SimulationMetadata | None = Field(
         None,
