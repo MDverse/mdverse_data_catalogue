@@ -33,8 +33,8 @@ def test_dataset_metadata_minimal_required_fields():
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     [
-        ("description", "", None),
-        ("keywords", [], None),
+        ("keywords", None, []),
+        ("authors", None, []),
         (
             "external_links",
             ["https://doi.org/10.1234/abc"],
@@ -42,15 +42,16 @@ def test_dataset_metadata_minimal_required_fields():
         ),
     ],
 )
-def test_empty_to_none(field, value, expected):
-    """Test that empty strings/lists are converted to None."""
+def test_none_to_empty_list(field, value, expected):
+    """Test that None values for list fields are converted to empty lists."""
     data = {
         "dataset_repository_name": DatasetSourceName.ZENODO,
         "dataset_id_in_repository": "123",
         "dataset_url_in_repository": "https://zenodo.org/record/123",
         "title": "Test Dataset",
-        field: value,
     }
+    if value is not None:
+        data[field] = value
     metadata = DatasetMetadata.model_validate(data)
     assert getattr(metadata, field) == expected
 
@@ -144,17 +145,13 @@ def test_dataset_metadata_full_scenario():
         dataset_id_in_project=None,
         dataset_url_in_project=None,
         title="Full Test Dataset",
-        description="",
         keywords=[],
-        authors=[],
         external_links=[],
-        license="",
     )
     # Check that empty fields are converted to None.
-    assert metadata.description is None
-    assert metadata.keywords is None
-    assert metadata.authors is None
-    assert metadata.external_links is None
+    assert metadata.keywords == []
+    assert metadata.authors == []
+    assert metadata.external_links == []
     assert metadata.license is None
     # Check that project fields are filled
     assert metadata.dataset_project_name == DatasetSourceName.FIGSHARE
