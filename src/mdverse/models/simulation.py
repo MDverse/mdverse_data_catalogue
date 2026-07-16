@@ -48,11 +48,6 @@ class ExternalIdentifier(BaseModel):
     def compute_url(self) -> "ExternalIdentifier":
         """Compute the URL for the external identifier.
 
-        Parameters
-        ----------
-        self: ExternalIdentifier
-            The model instance being validated, with all fields already validated.
-
         Returns
         -------
         ExternalIdentifier
@@ -95,8 +90,8 @@ class Molecule(BaseModel):
         None, description="Sequence of the molecule for protein and nucleic acid."
     )
     inchikey: str | None = Field(None, description="InChIKey of the molecule.")
-    external_identifiers: list[ExternalIdentifier] | None = Field(
-        None,
+    external_identifiers: list[ExternalIdentifier] = Field(
+        default_factory=list,
         description=("List of external database identifiers for this molecule."),
     )
 
@@ -143,8 +138,8 @@ class SimulationMetadata(BaseModel):
     # Ensure scraped metadata matches the expected schema exactly.
     model_config = ConfigDict(extra="forbid")
 
-    software: list[Software] | None = Field(
-        None,
+    software: list[Software] = Field(
+        default_factory=list,
         description="List of molecular dynamics tool or software.",
     )
     total_number_of_atoms: int | None = Field(
@@ -152,20 +147,22 @@ class SimulationMetadata(BaseModel):
         ge=0,  # equal or greater than zero
         description="Total number of atoms in the system.",
     )
-    molecules: list[Molecule] | None = Field(
-        None,
+    molecules: list[Molecule] = Field(
+        default_factory=list,
         description=("List of simulated molecules in the system."),
     )
-    forcefields_models: list[ForceFieldModel] | None = Field(
-        None,
+    forcefields_models: list[ForceFieldModel] = Field(
+        default_factory=list,
         description="List of forcefields and models used.",
     )
-    simulation_timesteps_in_fs: list[float] | None = Field(
-        None, description="Simulation timestep (in fs)."
+    simulation_timesteps_in_fs: list[float] = Field(
+        default_factory=list, description="Simulation timestep (in fs)."
     )
-    simulation_times: list[str] | None = Field(None, description="Simulation times.")
-    simulation_temperatures_in_kelvin: list[float] | None = Field(
-        None, description="Simulation temperatures (in K)."
+    simulation_times: list[str] = Field(
+        default_factory=list, description="Simulation times."
+    )
+    simulation_temperatures_in_kelvin: list[float] = Field(
+        default_factory=list, description="Simulation temperatures (in K)."
     )
 
     # ------------------------------------------------------------------
@@ -175,31 +172,28 @@ class SimulationMetadata(BaseModel):
     @classmethod
     def validate_positive_simulation_values(
         cls,
-        value: list[str | float] | None,
-    ) -> list[str | float] | None:
+        num_values: list[str | float],
+    ) -> list[str | float]:
         """Ensure simulation numeric parameters are strictly positive.
 
         Supported input types:
             - float (e.g. 0.0997, 1.2)
             - string containing a numeric value with optional units (e.g. "0.0997μs")
 
-        Parameters
-        ----------
-        cls: SimulationMetadata
-            The Pydantic model class being validated.
-        value : list[str | float] | None
-            Raw input simulation parameter value.
-
         Returns
         -------
-        list[str | float] | None
+        list[str | float]
             The validated value in the same structure as input, if all numeric values
             are strictly positive; otherwise raises ValueError.
-        """
-        if value is None:
-            return None
 
-        def check_positive(value: str | float):
+        Raises
+        ------
+        ValueError
+            If any numeric value is not strictly positive.
+        TypeError
+            If any value is not a string or a float.
+        """
+        for value in num_values:
             # Case 1: value is already numeric.
             if isinstance(value, (int, float)):
                 if value <= 0:
@@ -215,21 +209,14 @@ class SimulationMetadata(BaseModel):
             else:
                 msg = f"Unsupported type for simulation parameter: {type(value)}"
                 raise TypeError(msg)
-
-        # Iterate over the possible values
-        if isinstance(value, list):
-            for item in value:
-                check_positive(item)
-            return value
-
-        return value
+        return num_values
 
     @field_validator("simulation_temperatures_in_kelvin", mode="before")
     @classmethod
     def normalize_temperatures(
         cls,
-        temperatures: list[str] | None,
-    ) -> list[float] | None:
+        temperatures: list[str],
+    ) -> list[float]:
         """
         Normalize temperatures to Kelvin.
 
@@ -237,16 +224,9 @@ class SimulationMetadata(BaseModel):
         - "300K" or "300" (assume Kelvin if no unit)
         - "27°C" or "27" (assume Celsius if ending with °C)
 
-        Parameters
-        ----------
-        cls: SimulationMetadata
-            The Pydantic model class being validated.
-        temperatures : list[str] | None
-            Raw temperature values.
-
         Returns
         -------
-        list[float] | None
+        list[float]
             Temperatures converted to Kelvin.
 
         Raises
@@ -255,9 +235,6 @@ class SimulationMetadata(BaseModel):
             If a temperature string cannot be parsed
             as a number or has an invalid format.
         """
-        if temperatures is None:
-            return None
-
         temperatures_in_kelvin = []
         for temp_str in temperatures:
             temp_clean = str(temp_str).strip().lower()
