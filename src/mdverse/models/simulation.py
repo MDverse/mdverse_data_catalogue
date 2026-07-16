@@ -1,23 +1,10 @@
 """Pydantic data models used to validate simulation metadata from MD datasets."""
 
 import re
-from typing import Annotated
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    StringConstraints,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .enums import ExternalDatabaseName, MoleculeType
-
-DOI = Annotated[
-    str,
-    StringConstraints(pattern=r"^10\.\d{4,9}/[\w\-.]+$"),
-]
 
 
 class ExternalIdentifier(BaseModel):

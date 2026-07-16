@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from mdverse.models.dataset import DOI
 from mdverse.models.person import Person
 from mdverse.models.simulation import SimulationMetadata
 
@@ -12,7 +13,7 @@ class PublicationMetadata(BaseModel):
     # Ensure scraped metadata matches the expected schema exactly.
     model_config = ConfigDict(extra="forbid")
 
-    doi: str | None = Field(
+    doi: DOI | None = Field(
         None, description="Digital Object Identifier of the publication."
     )
     title: str = Field(..., description="Title of the publication.")
