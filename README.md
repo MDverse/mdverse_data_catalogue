@@ -48,7 +48,7 @@ Soon:
 Generate a visual diagram of the Pydantic model schema to see how scraped medadata are represented:
 
 ```sh
-uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
+uv run draw-pydantic-schema --out-path data/models/pydantic_schema.png
 ```
 
 ### Scraping Zenodo, Figshare and OSF
