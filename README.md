@@ -43,6 +43,14 @@ Soon:
 - [OSF](docs/osf.md)
 - [NMRlipids](docs/nmrlipids.md)
 
+### Data model for scraped data
+
+Generate a visual diagram of the Pydantic model schema to see how scraped medadata are represented:
+
+```sh
+uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
+```
+
 ### Scraping Zenodo, Figshare and OSF
 
 To scrape Zenodo, Figshare and OSF, you need a token. Because these data repositories are generic data repositories,
@@ -75,14 +83,6 @@ The script will recursively search for Parquet files in the specified folder.
 Aggregated results are stored in the `data/` folder in `stats_*.tsv` files.
 
 The notebook `notebooks/scraper_stats.ipynb` provides more in-depth analysis and figures.
-
-### Visualise Pydantic schemas
-
-Generate a visual diagram of the Pydantic models schema to see how MDverse entities (datasets, simulations, files, and publications) link together:
-
-```sh
-uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
-```
 
 ## Analyze Gromacs mdp and gro files
 

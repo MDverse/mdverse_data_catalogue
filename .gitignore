@@ -3,6 +3,7 @@
 *.parquet
 *.dbs
 data/*
+!data/models/*png
 !data/.gitkeep
 logs/*
 *.log
