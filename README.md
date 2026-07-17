@@ -27,13 +27,6 @@ Create a virtual environment:
 uv sync
 ```
 
-> **Note:** This project requires PyArrow >= 23.0.1. If you encounter errors
-> related to parquet files, upgrade PyArrow by running:
->
-> ```sh
-> uv add --upgrade pyarrow
-> ```
-
 ## Scrape MD data repositories
 
 Currently, we are scraping the following data repositories:
