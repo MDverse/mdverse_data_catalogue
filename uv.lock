@@ -1912,7 +1912,7 @@ dev = [
     { name = "jupyterlab", specifier = ">=4.4.9" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "plotly", specifier = ">=6.0.0" },
-    { name = "prek", specifier = ">=0.3.2" },
+    { name = "prek", specifier = ">=0.4.10" },
     { name = "pysankeybeta", specifier = ">=1.4.2" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.15.5" },
