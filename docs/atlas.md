@@ -40,7 +40,7 @@ Example with dataset id `1k5n_A`:
 Remarks:
 
 - The title of the dataset is the protein name.
-- No comment or description is provided. We used the organism name as description.
+- No description is provided. We generate one based on other available metadata.
 - Parameters of molecular dynamics simulations are provided through the API endpoint <https://www.dsimb.inserm.fr/ATLAS/api/MD_parameters>.
 
 ### Metadata for files
