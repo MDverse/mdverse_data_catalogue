@@ -265,7 +265,8 @@ def extract_software_and_version(
     Returns
     -------
     list[Software]
-        A list of Software instances with `name` and `version` fields, None otherwise.
+        A list of Software instances with `name` and `version` fields.
+        Returns an empty list if not found.
     """
     name = None
     version = None
@@ -273,7 +274,8 @@ def extract_software_and_version(
         software_info = (
             dataset.get("results", {}).get("method", {}).get("simulation", {})
         )
-        name = software_info.get("program_name")
+        # Trigger KeyError if "program_name" is missing.
+        name = software_info["program_name"]
         version = software_info.get("program_version")
         return [Software(name=name, version=version)]
     except (ValueError, KeyError) as e:

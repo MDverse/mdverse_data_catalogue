@@ -45,7 +45,7 @@ Soon:
 
 ### Data model for scraped data
 
-Generate a visual diagram of the Pydantic model schema to see how scraped medadata are represented:
+Generate a visual diagram of the Pydantic model schema to see how scraped metadata are represented:
 
 ```sh
 uv run draw-pydantic-schema --out-path data/models/pydantic_schema.png
