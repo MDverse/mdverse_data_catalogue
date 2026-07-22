@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from mdverse.core.logger import create_logger
 from mdverse.models.enums import DatasetSourceName
 from mdverse.models.file import FileMetadata
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.utils import (
     export_list_of_models_to_parquet,
@@ -223,7 +224,10 @@ def is_zenodo_connection_working(
     logger.info("Trying connection to Zenodo...")
     response = make_http_get_request_with_retries(
         url="https://zenodo.org/api/deposit/depositions",
-        params={"access_token": token},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
         timeout=10,
         max_attempts=2,
         logger=logger,
@@ -327,10 +331,14 @@ def extract_metadata_from_json(
             "date_created": hit.get("created", None),
             "date_last_updated": hit.get("modified", None),
             "title": clean_text(hit.get("metadata", {}).get("title", "")),
-            "author_names": [
-                author.get("name")
+            "authors": [
+                Person(
+                    full_name=author.get("name"),
+                    affiliation=author.get("affiliation"),
+                    orcid=author.get("orcid"),
+                )
                 for author in hit.get("metadata", {}).get("creators", [])
-                if author.get("name", None)
+                if author.get("name")
             ],
             "description": strip_html(hit.get("metadata", {}).get("description", "")),
             "keywords": [
