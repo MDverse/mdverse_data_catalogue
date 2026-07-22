@@ -29,6 +29,7 @@ warnings.filterwarnings(
 def make_http_get_request_with_retries(
     url: str,
     params: dict | None = None,
+    headers: dict | None = None,
     timeout: int = 10,
     delay_before_request: int = 1,
     max_attempts: int = 3,
@@ -42,6 +43,8 @@ def make_http_get_request_with_retries(
         The URL to send the GET request to.
     params : dict | None
         Optional dictionary of query parameters to include in the request.
+    headers : dict | None
+        Optional dictionary of HTTP headers to include in the request.
     timeout : int
         Timeout for the HTTP request in seconds.
     max_attempts : int
@@ -61,12 +64,17 @@ def make_http_get_request_with_retries(
         indicating the request is accepted but not ready yet.
         This error is caught and retried.
     """
-    headers = {
+    default_headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
         ),
     }
+    if headers is not None:
+        default_headers.update(headers)
+        headers = default_headers
+    else:
+        headers = default_headers
     logger.info("Making HTTP GET request to:")
     logger.info(url)
     for attempt in range(1, max_attempts + 1):
