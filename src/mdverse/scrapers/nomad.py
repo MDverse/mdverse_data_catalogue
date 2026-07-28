@@ -16,8 +16,9 @@ import loguru
 from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
-from mdverse.models.simulation import Molecule, Software
+from mdverse.models.simulation import Molecule, SimulationMetadata, Software
 from mdverse.models.utils import (
     export_list_of_models_to_parquet,
     normalize_datasets_metadata,
@@ -248,7 +249,7 @@ def scrape_files_for_one_dataset(
 
 def extract_software_and_version(
     dataset: dict, entry_id: str, logger: "loguru.Logger" = loguru.logger
-) -> list[Software] | None:
+) -> list[Software]:
     """
     Extract software name and version from the nested dataset dictionary.
 
@@ -263,8 +264,9 @@ def extract_software_and_version(
 
     Returns
     -------
-    list[Software] | None
-        A list of Software instances with `name` and `version` fields, None otherwise.
+    list[Software]
+        A list of Software instances with `name` and `version` fields.
+        Returns an empty list if not found.
     """
     name = None
     version = None
@@ -272,12 +274,13 @@ def extract_software_and_version(
         software_info = (
             dataset.get("results", {}).get("method", {}).get("simulation", {})
         )
-        name = software_info.get("program_name")
+        # Trigger KeyError if "program_name" is missing.
+        name = software_info["program_name"]
         version = software_info.get("program_version")
         return [Software(name=name, version=version)]
     except (ValueError, KeyError) as e:
         logger.warning(f"Error parsing software info for entry {entry_id}: {e}")
-    return None
+    return []
 
 
 def extract_molecules_and_total_atoms(
@@ -315,7 +318,7 @@ def extract_molecules_and_total_atoms(
             # Extract molecules.
             for topology in topologies:
                 if topology.get("structural_type") == "molecule":
-                    molecules.append(  # noqa: PERF401
+                    molecules.append(
                         Molecule(
                             name=topology.get("label", "unknown"),
                             number_of_atoms=topology.get("n_atoms"),
@@ -334,7 +337,7 @@ def extract_molecules_and_total_atoms(
 
 def extract_time_step(
     dataset: dict, entry_id: str, logger: "loguru.Logger" = loguru.logger
-) -> list[float] | None:
+) -> list[float]:
     """
     Extract the simulation time step from a dataset entry.
 
@@ -351,12 +354,12 @@ def extract_time_step(
 
     Returns
     -------
-    list[float] | None
-        A list contained the time step in fs, or None if not found.
+    list[float]
+        A list containing the time step in fs. Returns an empty list if not found.
     """
-    time_step = None
+    time_steps = []
     try:
-        time_step = (
+        step = (
             dataset.get("results", {})
             .get("properties", {})
             .get("thermodynamic", {})
@@ -365,12 +368,12 @@ def extract_time_step(
             .get("molecular_dynamics", {})
             .get("time_step")
         )
-        time_step = float(time_step) * 1e15 if time_step is not None else None
+        # Time step is provided in seconds, convert to femtoseconds (1 fs = 1e-15 s).
+        if step is not None:
+            time_steps.append(float(step) * 1e15)
     except (ValueError, KeyError, IndexError) as e:
         logger.warning(f"Could not extract time step for entry {entry_id}: {e}")
-    if time_step is None:
-        return None
-    return [time_step]
+    return time_steps
 
 
 def extract_datasets_metadata(
@@ -408,26 +411,32 @@ def extract_datasets_metadata(
             "date_created": dataset.get("entry_create_time"),
             "date_last_updated": dataset.get("last_processing_time"),
             "number_of_files": len(dataset.get("files", [])),
-            "author_names": [a.get("name") for a in dataset.get("authors", [])],
             "license": dataset.get("license"),
             "description": dataset.get("comment"),
         }
-        # Extract simulation metadata if available.
-        # Software names with their versions.
-        metadata["software"] = extract_software_and_version(dataset, entry_id, logger)
-        # Molecules with their nb of atoms and number total of atoms.
+        # Add authors metadata.
+        authors = [
+            Person(full_name=author.get("name"))
+            for author in dataset.get("authors", [])
+        ]
+        metadata["authors"] = authors
+        # Gather software metadata.
+        software = extract_software_and_version(dataset, entry_id, logger)
+        # Gather molecule metadata.
         molecules, total_atoms = extract_molecules_and_total_atoms(
             dataset, entry_id, logger
         )
-        metadata["total_number_of_atoms"] = total_atoms
-        metadata["molecules"] = molecules
-        # Time step in fs.
-        metadata["simulation_timesteps_in_fs"] = extract_time_step(
-            dataset, entry_id, logger
+        # Gather time steps metadata.
+        simulation_timesteps_in_fs = extract_time_step(dataset, entry_id, logger)
+        # It looks like the simulation temperature is not available!
+        # Extract simulation metadata if available.
+        metadata["simulation"] = SimulationMetadata(
+            molecules=molecules,
+            total_number_of_atoms=total_atoms,
+            software=software,
+            simulation_timesteps_in_fs=simulation_timesteps_in_fs,
         )
-        # Temperatures.
-        metadata["simulation_temperatures_in_kelvin"] = None  # TODO?
-
+        # Append the extracted metadata to the list of datasets metadata.
         datasets_metadata.append(metadata)
     logger.info(f"Extracted metadata for {len(datasets_metadata)} datasets.")
     return datasets_metadata

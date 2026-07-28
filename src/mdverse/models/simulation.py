@@ -77,6 +77,9 @@ class Molecule(BaseModel):
         None, description="Sequence of the molecule for protein and nucleic acid."
     )
     inchikey: str | None = Field(None, description="InChIKey of the molecule.")
+    organism: str | None = Field(
+        None, description="Organism the molecule is coming from."
+    )
     external_identifiers: list[ExternalIdentifier] = Field(
         default_factory=list,
         description=("List of external database identifiers for this molecule."),

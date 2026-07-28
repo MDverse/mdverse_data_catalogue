@@ -310,7 +310,7 @@ def get_zip_file_content_from_http_request(
             file_list.append(
                 {"file_name": file_item.filename, "file_size": file_item.file_size}
             )
-    logger.debug(f"Found {len(file_list)} files in the ZIP file.")
+    logger.debug(f"Found {len(file_list)} files in the ZIP file")
     return file_list
 
 

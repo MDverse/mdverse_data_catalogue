@@ -14,11 +14,13 @@ from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
 from mdverse.models.file import FileMetadata
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.simulation import (
     ExternalIdentifier,
     ForceFieldModel,
     Molecule,
+    SimulationMetadata,
     Software,
 )
 from mdverse.models.utils import (
@@ -41,14 +43,48 @@ from .toolbox import print_statistics
 BASE_URL = "https://www.dsimb.inserm.fr/ATLAS/"
 BASE_API_URL = "https://www.dsimb.inserm.fr/ATLAS/api"
 PDB_LIST_URL = "https://www.dsimb.inserm.fr/ATLAS/data/download/distributions/2024_11_18_ATLAS_pdb.txt"
+AFFILIATION = (
+    "Université Paris Cité and Université des Antilles and Université de la Réunion, "
+    "INSERM, BIGR, F-75014 Paris, France"
+)
 ATLAS_METADATA = {
     "license": "CC-BY-NC",  # https://www.dsimb.inserm.fr/ATLAS/download.html
-    "author_name": [  # https://academic.oup.com/nar/article/52/D1/D384/7438909
-        "Yann Vander Meersche",
-        "Gabriel Cretin",
-        "Aria Gheeraert",
-        "Jean-Christophe Gelly",
-        "Tatiana Galochkina",
+    "authors": [  # https://academic.oup.com/nar/article/52/D1/D384/7438909
+        Person(
+            full_name="Yann Vander Meersche",
+            first_name="Yann",
+            last_name="Vander Meersche",
+            orcid="0000-0002-6680-8104",
+            affiliation=AFFILIATION,
+        ),
+        Person(
+            full_name="Gabriel Cretin",
+            first_name="Gabriel",
+            last_name="Cretin",
+            orcid="0000-0002-3522-7083",
+            affiliation=AFFILIATION,
+        ),
+        Person(
+            full_name="Aria Gheeraert",
+            first_name="Aria",
+            last_name="Gheeraert",
+            orcid="0000-0001-7493-8702",
+            affiliation=AFFILIATION,
+        ),
+        Person(
+            full_name="Jean-Christophe Gelly",
+            first_name="Jean-Christophe",
+            last_name="Gelly",
+            orcid="0000-0001-5138-361X",
+            affiliation=AFFILIATION,
+        ),
+        Person(
+            full_name="Tatiana Galochkina",
+            first_name="Tatiana",
+            last_name="Galochkina",
+            orcid="0000-0002-3608-5208",
+            affiliation=AFFILIATION,
+        ),
     ],
     "doi": "10.1093/nar/gkad1084",  # https://academic.oup.com/nar/article/52/D1/D384/7438909
     "external_link": ["https://www.dsimb.inserm.fr/ATLAS/"],
@@ -106,6 +142,47 @@ def extract_files_from_html(
     return files_metadata
 
 
+def generate_description(
+    metadata: SimulationMetadata, logger: "loguru.Logger" = loguru.logger
+) -> str:
+    """Generate description for ATLAS dataset based on metadata.
+
+    Parameters
+    ----------
+    metadata : SimulationMetadata
+        Metadata object for the dataset.
+    logger : loguru.Logger
+        Logger for logging messages.
+
+    Returns
+    -------
+    str
+        Generated description string.
+    """
+    description = "[automatically generated] Molecular dynamics simulation of "
+    for molecule in metadata.molecules:
+        description += f"{molecule.name} "
+        description += f"from organism {molecule.organism} "
+        external_identifiers = [
+            f"{ext_id.database_name.value} ID: {ext_id.identifier}"
+            for ext_id in molecule.external_identifiers
+        ]
+        if external_identifiers:
+            description += "(" + ", ".join(external_identifiers) + ") "
+    description += f"with {metadata.software[0].name} {metadata.software[0].version} "
+    forcefields_models = [
+        f"{ffm.name} {ffm.version}" if ffm.version else f"{ffm.name}"
+        for ffm in metadata.forcefields_models
+    ]
+    if metadata.forcefields_models:
+        description += "using " + " and ".join(forcefields_models) + " "
+    description += f"at {metadata.simulation_temperatures_in_kelvin[0]} K "
+    description += f"for {metadata.simulation_times[0]}."
+    logger.debug("Dataset generated description:")
+    logger.debug(description)
+    return description
+
+
 def scrape_metadata_for_one_dataset(
     client: httpx.Client,
     chain_id: str,
@@ -150,13 +227,12 @@ def scrape_metadata_for_one_dataset(
         "dataset_id_in_repository": chain_id,
         "dataset_url_in_repository": dataset_url,
         "title": meta_json.get("protein_name"),
-        "description": meta_json.get("organism"),
         "license": ATLAS_METADATA["license"],
-        "author_names": ATLAS_METADATA["author_name"],
+        "authors": ATLAS_METADATA["authors"],
         "doi": ATLAS_METADATA["doi"],
         "external_links": ATLAS_METADATA["external_link"],
     }
-    # Add molecules.
+    # Gather metadata for molecules.
     external_identifiers = []
     if meta_json.get("PDB"):
         external_identifiers.append(
@@ -172,37 +248,39 @@ def scrape_metadata_for_one_dataset(
                 identifier=meta_json["UniProt"],
             )
         )
-    metadata["molecules"] = [
-        Molecule(
-            name=meta_json.get("protein_name"),
-            sequence=meta_json.get("sequence"),
-            external_identifiers=external_identifiers,
-            type=MoleculeType.PROTEIN,
-        )
-    ]
-    # Add software.
-    metadata["software"] = [
+    molecule = Molecule(
+        name=meta_json.get("protein_name"),
+        sequence=meta_json.get("sequence"),
+        organism=meta_json.get("organism"),
+        external_identifiers=external_identifiers,
+        type=MoleculeType.PROTEIN,
+    )
+    # Gather metadata for software.
+    software = [
         Software(
             name=ATLAS_METADATA["software_name"],
             version=ATLAS_METADATA["software_version"],
         )
     ]
-    # Add forcefields and models.
-    metadata["forcefields_models"] = [
+    # Gather metadata for forcefields and models.
+    forcefields_models = [
         ForceFieldModel(
             name=ATLAS_METADATA["forcefield_name"],
             version=ATLAS_METADATA["forcefield_version"],
         ),
         ForceFieldModel(name=ATLAS_METADATA["water_model"]),
     ]
-    # Add simulation temperature.
-    metadata["simulation_temperatures_in_kelvin"] = [
-        ATLAS_METADATA["simulation_temperature"]
-    ]
-    # Add simulation time.
-    metadata["simulation_times"] = [ATLAS_METADATA["simulation_time"]]
-    # Add simulation time step.
-    metadata["simulation_timesteps_in_fs"] = [ATLAS_METADATA["simulation_timestep"]]
+    # Create simulation metadata.
+    simulation_metadata = SimulationMetadata(
+        molecules=[molecule],
+        software=software,
+        forcefields_models=forcefields_models,
+        simulation_temperatures_in_kelvin=[ATLAS_METADATA["simulation_temperature"]],
+        simulation_times=[ATLAS_METADATA["simulation_time"]],
+        simulation_timesteps_in_fs=[ATLAS_METADATA["simulation_timestep"]],
+    )
+    metadata["simulation"] = simulation_metadata
+    metadata["description"] = generate_description(simulation_metadata)
     logger.info("Done.")
     return metadata
 
