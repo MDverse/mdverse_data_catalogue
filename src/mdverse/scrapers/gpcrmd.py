@@ -5,6 +5,7 @@ https://www.gpcrmd.org/dynadb/search/
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,15 @@ from bs4 import BeautifulSoup
 
 from mdverse.core.logger import create_logger
 from mdverse.models.enums import DatasetSourceName
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
-from mdverse.models.simulation import ForceFieldModel, Molecule, Software
+from mdverse.models.simulation import (
+    ExternalIdentifier,
+    ForceFieldModel,
+    Molecule,
+    SimulationMetadata,
+    Software,
+)
 from mdverse.models.utils import (
     export_list_of_models_to_parquet,
     normalize_datasets_metadata,
@@ -45,24 +53,12 @@ def scrape_all_datasets(
     """
     Scrape Molecular Dynamics-related datasets from the GPCRmd API.
 
-    Parameters
-    ----------
-    client : httpx.Client
-        The HTTPX client to use for making requests.
-    url : str
-        The URL of the API request.
-    logger: "loguru.Logger"
-        Logger for logging messages.
-    scraper: ScraperContext
-        Pydantic model describing the context of a scraper
-
     Returns
     -------
     list[dict]:
         A list of GPCRmd entries.
     """
     logger.info("Scraping molecular dynamics datasets from GPCRmd.")
-    logger.info("Requesting all datasets in a single fetch...")
     all_datasets = []
     response = make_http_request_with_retries(
         client,
@@ -83,13 +79,20 @@ def scrape_all_datasets(
             logger.error("Cannot find datasets.")
             logger.critical("Aborting.")
             sys.exit(1)
+    if not all_datasets:
+        logger.critical("No datasets found in GPCRmd.")
+        logger.critical("Aborting.")
+        sys.exit(1)
+    else:
+        # Log the first dataset raw metadata.
+        logger.debug("First dataset raw metadata:")
+        logger.debug(all_datasets[0])
+        logger.success(f"Scraped {len(all_datasets)} datasets in GPCRmd.")
 
     if scraper and scraper.is_in_debug_mode and len(all_datasets) >= 10:
         logger.warning("Debug mode is ON: stopping after 10 datasets.")
         # Return only the first 10 datasets for testing purposes.
         return all_datasets[:10]
-
-    logger.success(f"Scraped {len(all_datasets)} datasets in GPCRmd.")
     return all_datasets
 
 
@@ -98,27 +101,18 @@ def fetch_all_datasets_html_pages(
 ) -> list[list[str] | None]:
     """Fetch all datasets HTML pages.
 
-    Parameters
-    ----------
-    client : httpx.Client
-        The HTTPX client to use for making requests.
-    datasets : List[Dict[str, Any]]
-        List of raw GPCRmd datasets metadata.
-    logger: "loguru.Logger"
-        Logger for logging messages.
-
     Returns
     -------
     list[list[str] | None]
         The HTML content of datasets pages.
     """
-    logger.info("Fetching HTML content for all datasets from the GPCRmd repository")
+    logger.info("Fetching HTML content for all datasets.")
     datasets_html_pages = []
 
     for dataset_counter, dataset in enumerate(datasets, start=1):
         # Get the URL of the current dataset
         dataset_id = str(dataset.get("dyn_id"))
-        logger.info(f"Scraping dataset {dataset_id}:")
+        logger.info(f"Scraping dataset ID `{dataset_id}`.")
         url = dataset.get("url")
         page_content = None
         # If the dataset has a URL, attempt to fetch its HTML content
@@ -134,7 +128,6 @@ def fetch_all_datasets_html_pages(
             if response:
                 # Store the HTML text
                 html_content = response.text
-                logger.success(f"Dataset {dataset_id} fetched successfully")
                 logger.debug(f"HTML length: {len(html_content)} characters")
                 # Extract HTML page content.
                 soup = BeautifulSoup(html_content, "html.parser")
@@ -150,11 +143,13 @@ def fetch_all_datasets_html_pages(
                         page_content.append(stripped_line)
                 page_content.extend(link_targets)
             else:
-                logger.warning(f"Failed to fetch HTML page for dataset {dataset_id}")
+                logger.warning(
+                    f"Failed to fetch HTML page for dataset ID `{dataset_id}`."
+                )
         datasets_html_pages.append(page_content)
-        logger.info(
+        logger.success(
             f"Scraped {dataset_counter:,}/{len(datasets):,} "
-            f"({dataset_counter / len(datasets):.0%}) datasets"
+            f"datasets ({dataset_counter / len(datasets):.0%})."
         )
     return datasets_html_pages
 
@@ -167,11 +162,6 @@ def _extract_molecules_from_lines(lines: list[str]) -> list[Molecule] | None:
     subsequent lines expected to follow the format "Name: count".
     Parsing stops as soon as the format no longer matches this pattern.
 
-    Parameters
-    ----------
-    lines : list[str]
-        Text lines extracted from the HTML content.
-
     Returns
     -------
     list[Molecule] | None
@@ -183,16 +173,13 @@ def _extract_molecules_from_lines(lines: list[str]) -> list[Molecule] | None:
 
     for line in lines:
         clean_line = line.strip()
-
         # Skip empty lines
         if not clean_line:
             continue
-
         # Start capturing after the "Number of molecules" header
         if "Number of molecules" in clean_line:
             capture = True
             continue
-
         if capture:
             # Stop when the expected "Name: number" pattern is no longer found.
             if ":" not in clean_line or "Total" in clean_line:
@@ -216,30 +203,18 @@ def retrieve_metadata_from_html_dataset_page(
     field_name: str | None,
     dataset_id: str,
     logger: "loguru.Logger" = loguru.logger,
-) -> list[str] | list[Molecule] | None:
+) -> list[str] | list[Molecule]:
     """
     Retrieve a specific metadata field from a webpage.
 
-    Parameters
-    ----------
-    html_content : list[str] | None
-        The HTML content of the page.
-    field_name : str | None
-        The name of the metadata field to extract (case-sensitive).
-        Must appear in the HTML content in the exact format "Field_name:".
-    dataset_id: str
-        The unique identifier of the dataset in GPCRmd.
-    logger: "loguru.Logger"
-        Logger for logging messages.
-
     Returns
     -------
-    list[str] | list[Molecule] | None
-        The value of the metadata field in a list if found, otherwise None.
+    list[str] | list[Molecule]
+        The value of the metadata field in a list if found, otherwise an empty list.
 
     """
     if not html_content or not field_name:
-        return None
+        return []
     try:
         # Special case for molecules and their number of atoms
         if field_name == "Number of molecules":
@@ -269,7 +244,7 @@ def retrieve_metadata_from_html_dataset_page(
             f"Error parsing field '{field_name}' for dataset {dataset_id}: {exc}"
         )
 
-    return None
+    return []
 
 
 def scrape_files_metadata_for_one_dataset(
@@ -281,26 +256,11 @@ def scrape_files_metadata_for_one_dataset(
     """
     Scrape files metadata for a given dataset.
 
-    Parameters
-    ----------
-    client : httpx.Client
-        The HTTPX client to use for making requests.
-    html_content: list[str] | None
-        Html content of the dataset web page.
-    core_metadata : dict[str, Any]
-        Dictionary of dataset core metadata.
-    logger: "loguru.Logger"
-        Logger for logging messages.
-
     Returns
     -------
     list[dict]
         List of files metadata dictionaries.
     """
-    logger.info(
-        "Scraping files metadata for dataset: "
-        f"{core_metadata['dataset_id_in_repository']}"
-    )
     files_metadata = []
     # Extract metadata from dataset url page if available.
     if not html_content:
@@ -308,15 +268,11 @@ def scrape_files_metadata_for_one_dataset(
         return files_metadata
 
     # Find all <a> tags with href containing the files path.
-    # Example of files found for dataset 2316:
-    # Dataset URL: https://www.gpcrmd.org/dynadb/dynamics/id/2316/
-    # /dynadb/files/Dynamics/dyn2667/tmp_dyn_0_2667.pdb
-    # /dynadb/files/Dynamics/dyn2667/25399_dyn_2316.psf
-    # /dynadb/files/Dynamics/dyn2667/25400_trj_2316.dcd
-    # /dynadb/files/Dynamics/dyn2667/25401_trj_2316.dcd
-    # /dynadb/files/Dynamics/dyn2667/25402_trj_2316.dcd
-    # /dynadb/files/Dynamics/dyn2667/25403_prm_2316.prmtop
-    # /dynadb/files/Dynamics/dyn2667/25404_prt_2316.tgz
+    # Example of files found for dataset ID `17``:
+    # Dataset URL: https://www.gpcrmd.org/dynadb/dynamics/id/7/
+    # /dynadb/files/Dynamics/10166_trj_7.dcd
+    # /dynadb/files/Dynamics/10167_dyn_7.psf
+    # /dynadb/files/Dynamics/10168_dyn_7.pdb
     for line in html_content:
         if "/dynadb/files/Dynamics/" not in line:
             continue
@@ -331,9 +287,62 @@ def scrape_files_metadata_for_one_dataset(
             client, metadata["file_url_in_repository"], logger=logger
         )
         files_metadata.append(metadata)
-
-    logger.info(f"Total files found: {len(files_metadata):,}")
+    logger.info(f"Total files found: {len(files_metadata)}.")
     return files_metadata
+
+
+def _parse_authors(raw_authors: str | None) -> list[Person]:
+    """Parse raw author string into a list of Person models.
+
+    Returns
+    -------
+    list[Person]
+        A list of Person objects representing the authors.
+    """
+    if not raw_authors or not raw_authors.strip():
+        return []
+    raw_str = raw_authors.strip()
+
+    # Handle comma case: left = authors, right = affiliation
+    if "," in raw_str:
+        names_part, _, aff_part = raw_str.partition(",")
+        affiliation = aff_part.strip() or None
+        words = names_part.strip().split()
+        n_words = len(words)
+        # Multiple authors case: >= 4 words and even count (pairs of first/last names)
+        if n_words >= 4 and n_words % 2 == 0:
+            return [
+                Person(
+                    first_name=words[i],
+                    last_name=words[i + 1],
+                    full_name=f"{words[i]} {words[i + 1]}",
+                    affiliation=affiliation,
+                )
+                for i in range(0, n_words, 2)
+            ]
+        # Single author case
+        elif words:
+            first = words[0] if n_words > 1 else None
+            last = " ".join(words[1:]) if n_words > 1 else words[0]
+            return [
+                Person(
+                    first_name=first,
+                    last_name=last,
+                    full_name=names_part.strip(),
+                    affiliation=affiliation,
+                )
+            ]
+
+    # No comma: handle parenthesized affiliation exception (e.g. "Group Name (Univ)")
+    if match := re.search(r"^(.*?)\s*\((.*?)\)$", raw_str):
+        return [
+            Person(
+                full_name=match.group(1).strip(),
+                affiliation=match.group(2).strip() or None,
+            )
+        ]
+    # No comma, no parentheses: fallback to plain full_name only
+    return [Person(full_name=raw_str)]
 
 
 def extract_datasets_and_files_metadata(
@@ -345,17 +354,6 @@ def extract_datasets_and_files_metadata(
     """
     Extract relevant metadata from raw GPCRmd datasets metadata.
 
-    Parameters
-    ----------
-    client : httpx.Client
-        The HTTPX client to use for making requests.
-    datasets : list[dict[str, Any]]
-        List of raw GPCRmd datasets metadata.
-    datasets_html_content: list[list[str] | None]
-        List of html content of the dataset web page.
-    logger: "loguru.Logger"
-        Logger for logging messages.
-
     Returns
     -------
     list[dict]
@@ -365,112 +363,133 @@ def extract_datasets_and_files_metadata(
     """
     datasets_metadata = []
     files_metadata = []
-
     for dataset, html_content in zip(datasets, datasets_html_content, strict=True):
         dataset_id = str(dataset.get("dyn_id"))
-        logger.info(f"Extracting metadata for dataset: {dataset_id}")
-        dataset_source_name = DatasetSourceName.GPCRMD
+        logger.info(f"Extracting metadata for dataset ID `{dataset_id}`.")
         dataset_url = dataset.get("url")
+        # Add core metadata for the dataset.
         core_metadata = {
-            "dataset_repository_name": dataset_source_name,
+            "dataset_repository_name": DatasetSourceName.GPCRMD,
             "dataset_id_in_repository": dataset_id,
             "dataset_url_in_repository": dataset_url,
         }
-        metadata = {
+        # Initialize dataset metadata.
+        dataset_dict = {
             **core_metadata,
             "title": dataset.get("modelname"),
             "date_created": dataset.get("creation_timestamp"),
-            "total_number_of_atoms": dataset.get("atom_num"),
         }
-        # Convert the timestep string (e.g., "4.0 fs")
-        # to a float representing the number of femtoseconds
-        timestep = dataset.get("timestep")
-        if not isinstance(timestep, float) and timestep is not None:
-            timestep = float(dataset.get("timestep").split()[0])
-        metadata["simulation_timesteps_in_fs"] = [timestep]
-        # Extract simulation metadata from the API if available.
-        # Software names with their versions.
-        software = None
-        if dataset.get("mysoftware"):
-            software = [
-                Software(
-                    name=dataset["mysoftware"],
-                    version=dataset.get("software_version"),
-                )
-            ]
-        metadata["software"] = software
-        # Forcefields and models.
-        forcefields_and_models = []
-        if dataset.get("forcefield"):
-            forcefields_and_models = [
-                ForceFieldModel(
-                    name=dataset["forcefield"],
-                    version=dataset.get("forcefield_version"),
-                )
-            ]
-        metadata["forcefields_models"] = forcefields_and_models
-
         # Extract other metadata from dataset url page if available.
         if html_content is None:
-            logger.warning(
-                "Cannot parse additional metadata from HTML page for dataset:"
-                f" {dataset_id}"
-            )
+            logger.warning(f"Cannot parse HTML metadata for dataset `{dataset_id}`.")
             logger.warning(dataset_url)
             logger.warning("Skipping this step.")
-            datasets_metadata.append(metadata)
+            datasets_metadata.append(dataset_dict)
             continue
-        # Get solvent model from the HTML content of the dataset page.
-        solvent_model = retrieve_metadata_from_html_dataset_page(
-            html_content=html_content, field_name="Solvent type", dataset_id=dataset_id
-        )
-        if solvent_model:
-            metadata["forcefields_models"].append(
-                ForceFieldModel(name=solvent_model[0], version=None)
-            )
-        # Molecule names with their number of molecules.
-        metadata["molecules"] = retrieve_metadata_from_html_dataset_page(
-            html_content=html_content,
-            field_name="Number of molecules",
-            dataset_id=dataset_id,
-        )
-        # Author names.
-        metadata["author_names"] = retrieve_metadata_from_html_dataset_page(
-            html_content=html_content, field_name="Submitted by", dataset_id=dataset_id
-        )
         # Description.
-        description = retrieve_metadata_from_html_dataset_page(
+        dataset_dict["description"] = retrieve_metadata_from_html_dataset_page(
             html_content=html_content, field_name="Description", dataset_id=dataset_id
-        )
-        metadata["description"] = description[0] if description else None
-        # Simulation time.
-        metadata["simulation_times"] = retrieve_metadata_from_html_dataset_page(
-            html_content=html_content,
-            field_name="Accumulated simulation time",
-            dataset_id=dataset_id,
-        )
+        )[0]
         # Reference links.
-        metadata["external_links"] = retrieve_metadata_from_html_dataset_page(
+        dataset_dict["external_links"] = retrieve_metadata_from_html_dataset_page(
             html_content=html_content, field_name="doi", dataset_id=dataset_id
         )
+        # Author names.
+        raw_authors = retrieve_metadata_from_html_dataset_page(
+            html_content=html_content, field_name="Submitted by", dataset_id=dataset_id
+        )[0]
+        dataset_dict["authors"] = _parse_authors(raw_authors)
         # Retrieve the files metadata from the html content of the dataset page.
         files_metadata_for_this_dataset = scrape_files_metadata_for_one_dataset(
             client, html_content, core_metadata, logger=logger
         )
         files_metadata.extend(files_metadata_for_this_dataset)
-        # Number of files.
-        if files_metadata_for_this_dataset:
-            metadata["number_of_files"] = len(files_metadata_for_this_dataset)
-        # Adding full metadata for the dataset.
-        datasets_metadata.append(metadata)
-        logger.info(
-            f"Scraped metadata for {len(datasets_metadata):,}/{len(datasets):,} "
-            f"({len(datasets_metadata) / len(datasets):.0%}) datasets "
-            f"({len(files_metadata):,} files)"
+        dataset_dict["number_of_files"] = len(files_metadata_for_this_dataset)
+        # Extract simulation metadata from the API if available.
+        # Software names with their versions.
+        if dataset.get("mysoftware"):
+            software = [
+                Software(
+                    name=dataset["mysoftware"], version=dataset.get("software_version")
+                )
+            ]
+        # Forcefields and models.
+        forcefields_and_models = []
+        if dataset.get("forcefield"):
+            forcefields_and_models.append(
+                ForceFieldModel(
+                    name=dataset["forcefield"],
+                    version=dataset.get("forcefield_version"),
+                )
+            )
+        # Get solvent model from the HTML content of the dataset page.
+        solvent_model = retrieve_metadata_from_html_dataset_page(
+            html_content=html_content, field_name="Solvent type", dataset_id=dataset_id
         )
-
-    logger.info(f"Extracted metadata for {len(datasets_metadata)} datasets.")
-    logger.info(f"Extracted metadata for {len(files_metadata)} files.")
+        if solvent_model:
+            forcefields_and_models.append(
+                ForceFieldModel(name=solvent_model[0], version=None)
+            )
+        # Molecules.
+        # Get Uniprot ID and PDB ID from the API metadata.
+        db_links = []
+        uniprot_id = dataset.get("uniprot")
+        if uniprot_id:
+            db_links.append(
+                ExternalIdentifier(
+                    database_name="uniprot",
+                    identifier=uniprot_id,
+                    url=f"https://www.uniprot.org/uniprotkb/{uniprot_id}/entry",
+                )
+            )
+        pdb_id = dataset.get("pdb_namechain")
+        if pdb_id:
+            db_links.append(
+                ExternalIdentifier(
+                    database_name="pdb",
+                    identifier=pdb_id,
+                    url=f"https://www.rcsb.org/structure/{pdb_id}",
+                )
+            )
+        molecules = [
+            Molecule(
+                name=dataset.get("protname"),
+                organism=dataset.get("species"),
+                external_identifiers=db_links,
+            )
+        ]
+        # Add other molecules scraped from HTML.
+        # Like membrane lipids, ions, water, etc.
+        html_mols = retrieve_metadata_from_html_dataset_page(
+            html_content, "Number of molecules", dataset_id
+        )
+        if html_mols:
+            molecules.extend(html_mols)
+        # Simulation time.
+        simulation_times = retrieve_metadata_from_html_dataset_page(
+            html_content=html_content,
+            field_name="Accumulated simulation time",
+            dataset_id=dataset_id,
+        )
+        # Convert the timestep string (e.g., "4.0 fs")
+        # to a float representing the number of femtoseconds
+        timestep = dataset.get("timestep")
+        if not isinstance(timestep, float) and timestep is not None:
+            timestep = float(dataset.get("timestep").split()[0])
+        # Adding full metadata for the dataset.
+        dataset_dict["simulation"] = SimulationMetadata(
+            total_number_of_atoms=dataset.get("atom_num"),
+            simulation_timesteps_in_fs=[timestep],
+            software=software,
+            forcefields_models=forcefields_and_models,
+            molecules=molecules,
+            simulation_times=simulation_times,
+        )
+        datasets_metadata.append(dataset_dict)
+        logger.success(
+            f"Scraped metadata for {len(datasets_metadata):,}/{len(datasets):,} "
+            f"datasets ({len(datasets_metadata) / len(datasets):.0%})."
+        )
     return datasets_metadata, files_metadata
 
 
@@ -501,16 +520,14 @@ def main(output_dir_path: Path, *, is_in_debug_mode: bool = False) -> None:
         is_in_debug_mode=is_in_debug_mode,
     )
     # Create logger.
-    level = "INFO"
-    if scraper.is_in_debug_mode:
-        level = "DEBUG"
+    level = "DEBUG" if scraper.is_in_debug_mode else "INFO"
     logger = create_logger(logpath=scraper.log_file_path, level=level)
     # Print scraper configuration.
     logger.debug(scraper.model_dump_json(indent=4, exclude={"token"}))
     logger.info("Starting GPCRmd scraping...")
-    # Create HTTPX client
+    # Create HTTPX client.
     client = create_httpx_client()
-    # Check connection to GPCRmd API
+    # Check connection to GPCRmd API.
     if is_connection_to_server_working(
         client, f"{BASE_GPCRMD_URL}/pdbs/", logger=logger
     ):
@@ -519,7 +536,6 @@ def main(output_dir_path: Path, *, is_in_debug_mode: bool = False) -> None:
         logger.critical("Connection to GPCRmd API failed.")
         logger.critical("Aborting.")
         sys.exit(1)
-
     # Scrape GPCRmd datasets metadata.
     datasets_raw_metadata = scrape_all_datasets(
         client=client,
@@ -527,13 +543,6 @@ def main(output_dir_path: Path, *, is_in_debug_mode: bool = False) -> None:
         scraper=scraper,
         logger=logger,
     )
-    if not datasets_raw_metadata:
-        logger.critical("No datasets found in GPCRmd.")
-        logger.critical("Aborting.")
-        sys.exit(1)
-    # Send the first dataset raw metadata to the debug log.
-    logger.debug("First dataset raw metadata:")
-    logger.debug(datasets_raw_metadata[0])
     # Fetch the dataset HTML page for all datasets
     datasets_html_content = fetch_all_datasets_html_pages(
         client, datasets_raw_metadata, logger=logger
