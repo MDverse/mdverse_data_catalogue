@@ -11,123 +11,120 @@ import numpy as np
 import pandas as pd
 
 from mdverse.core.logger import create_logger
+from mdverse.models.enums import DatasetSourceName
 
-# ============================================================================
-# Configuration
-# ============================================================================
+DATASETS_COLUMN_MAPPING = {
+    "dataset_repository_name": "data_source_label",
+    "dataset_id_in_repository": "id_in_data_source",
+    "dataset_url_in_repository": "url_in_data_source",
+    "dataset_project_name": "project_label",
+    "dataset_id_in_project": "id_in_project",
+    "dataset_url_in_project": "url_in_project",
+    "number_of_files": "file_number",
+}
 
-SOURCE_URLS = {
-    "zenodo": "https://zenodo.org/",
-    "figshare": "https://figshare.com/",
-    "atlas": "https://www.dsimb.inserm.fr/ATLAS/",
-    "nomad": "https://nomad-lab.eu/",
-    "gpcrmd": "https://www.gpcrmd.org/",
-    "mdposit_mmb_node": "https://mmb.mddbr.eu/",
-    "mdposit_inria_node": "https://dynarepo.inria.fr/",
-    "mdposit_cineca_node": "https://cineca.mddbr.eu/",
+SIMULATION_CATEGORY_MAPPING = [
+    ("simulation_timesteps_in_fs", "SIMULATION_TIMESTEP"),
+    ("simulation_times", "SIMULATION_TIME"),
+    ("simulation_temperatures_in_kelvin", "SIMULATION_TEMPERATURE"),
+]
+
+FILES_COLUMN_MAPPING = {
+    "dataset_repository_name": "data_source_label",
+    "dataset_id_in_repository": "dataset_id",
+    "file_name": "name",
+    "file_url_in_repository": "url",
+    "file_size_in_bytes": "size_in_bytes",
+    "file_md5": "md5",
+    "containing_archive_file_name": "parent_zip_file_name",
+    "file_type": "file_type_label",
+    "file_size_with_human_readable_unit": "size_human_readable",
 }
 
 
-# ============================================================================
-# Connection
-# ============================================================================
-
-
-def get_db_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
-    """Get a connection to the DuckDB database.
-
-    Parameters
-    ----------
-    db_path : Path
-        Path to the DuckDB database file.
+def init_db_connection(
+    db_path: Path, *, read_only: bool = False, logger: "loguru.Logger" = loguru.logger
+) -> duckdb.DuckDBPyConnection:
+    """Initialize a connection to the DuckDB database.
 
     Returns
     -------
     duckdb.DuckDBPyConnection
         A connection object to interact with the DuckDB database.
+
+    Raises
+    ------
+    PermissionError
+        If read or write permissions are missing for the database file or directory.
+    duckdb.IOException
+        If an I/O error or file lock contention occurs while opening the database.
+    duckdb.CatalogException
+        If there is a catalog resolution or database structural issue.
+    duckdb.Error
+        If DuckDB encounters a general error opening or initializing the database.
     """
-    return duckdb.connect(str(db_path))
+    try:
+        db = duckdb.connect(str(db_path), read_only=read_only)
+        logger.success(f"Successfully connected to DuckDB database at {db_path}.")
+        return db
+
+    except PermissionError as e:
+        logger.error(f"Permission denied accessing DuckDB database at {db_path}: {e}")
+        raise
+    except (duckdb.IOException, duckdb.CatalogException) as e:
+        logger.error(f"DuckDB I/O or catalog error opening {db_path}: {e}")
+        raise
+    except duckdb.Error as e:
+        logger.error(f"Failed to connect to DuckDB database at {db_path}: {e}")
+        raise
 
 
-# ============================================================================
-# DataFrame loaders
-# Read only the columns we need; all normalisation done here in pandas
-# (vectorised, C speed) before any SQL runs.
-# ============================================================================
+def resolve_source_attribute(src_name: str, attr: str) -> str | None:
+    """Resolve a source attribute from the DatasetSourceName enum.
+
+    Returns
+    -------
+    str | None
+        The attribute value if the source name is valid, otherwise None.
+    """
+    if src_name in DatasetSourceName._value2member_map_:
+        return getattr(DatasetSourceName(src_name), attr)
+    return None
 
 
 def load_datasets_df(parquet_path: str) -> pd.DataFrame:
     """Load parquet file into a Pandas dataframe for datasets metadata.
-
-    Parameters
-    ----------
-    parquet_path : str
-        Path to the parquet file containing the metadata.
 
     Returns
     -------
     pd.DataFrame
         A dataframe containing the datasets metadata.
     """
-    df = pd.read_parquet(
-        parquet_path,
-        columns=[
-            "dataset_repository_name",
-            "dataset_id_in_repository",
-            "doi",
-            "date_created",
-            "date_last_updated",
-            "date_last_fetched",
-            "number_of_files",
-            "download_number",
-            "view_number",
-            "license",
-            "dataset_url_in_repository",
-            "title",
-            "author_names",
-            "keywords",
-            "description",
-        ],
-    )
-    # Rename columns to match the database schema.
-    df = df.rename(
-        columns={
-            "dataset_repository_name": "data_source",
-            "dataset_id_in_repository": "id_in_data_source",
-            "date_last_updated": "date_last_modified",
-            "date_last_fetched": "date_last_crawled",
-            "number_of_files": "file_number",
-            "dataset_url_in_repository": "url_in_data_source",
-            "author_names": "author_list",
-        }
-    )
-    # Flatten author list to a semicolon-separated string.
-    df["author_list"] = df["author_list"].apply(
-        lambda row: " ;".join(row) if isinstance(row, (list, tuple, np.ndarray)) else ""
-    )
-
-    # Flatten keywords list to a semicolon-separated string.
+    df = pd.read_parquet(parquet_path)
+    df = df.rename(columns=DATASETS_COLUMN_MAPPING)
+    # Flatten the keywords list into a single string for database storage.
     df["keywords"] = df["keywords"].apply(
         lambda row: " ;".join(row) if isinstance(row, (list, tuple, np.ndarray)) else ""
     )
-
+    # Convert numeric columns to integers, handling NaN values appropriately.
     for col in ("file_number", "download_number", "view_number"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-
-    for col in ("doi", "license", "description", "url_in_data_source", "title"):
-        df[col] = df[col].where(df[col].notna(), other=None)
-
-    df["data_source_url"] = df["data_source"].map(SOURCE_URLS)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+    # Attribute resolution for data source URL, citation, and comment.
+    df["data_source_url"] = df["data_source_label"].apply(
+        lambda src: resolve_source_attribute(src, "url")
+    )
+    df["data_source_citation"] = df["data_source_label"].apply(
+        lambda src: resolve_source_attribute(src, "citation")
+    )
+    df["data_source_comment"] = df["data_source_label"].apply(
+        lambda src: resolve_source_attribute(src, "comment")
+    )
     return df
 
 
 def load_files_df(parquet_path: str) -> pd.DataFrame:
     """Load parquet file into a Pandas dataframe for files metadata.
-
-    Parameters
-    ----------
-    parquet_path : str
-        Path to the parquet file containing the files metadata.
 
     Returns
     -------
@@ -136,170 +133,162 @@ def load_files_df(parquet_path: str) -> pd.DataFrame:
     """
     df = pd.read_parquet(
         parquet_path,
-        columns=[
-            "dataset_repository_name",
-            "dataset_id_in_repository",
-            "file_name",
-            "file_url_in_repository",
-            "file_size_in_bytes",
-            "file_md5",
-            "containing_archive_file_name",
-            "file_type",
-        ],
+        columns=list(FILES_COLUMN_MAPPING.keys()),
     )
-    df = df.rename(
-        columns={
-            "dataset_repository_name": "data_source",
-            "dataset_id_in_repository": "dataset_id_in_data_source",
-            "file_name": "name",
-            "file_url_in_repository": "url",
-            "file_size_in_bytes": "size_in_bytes",
-            "file_md5": "md5",
-            "containing_archive_file_name": "parent_zip_file_name",
-            "file_type": "file_type_name",
-        }
-    )
+    df = df.rename(columns=FILES_COLUMN_MAPPING)
+    # Derive boolean/flag for archive containment.
     df["is_from_zip_file"] = df["parent_zip_file_name"].notna().astype(int)
-    for col in ("size_in_bytes", "md5", "url", "parent_zip_file_name"):
-        df[col] = df[col].where(df[col].notna(), other=None)
+    # Convert numeric columns to integers, handling NaN values appropriately.
+    if "size_in_bytes" in df.columns:
+        df["size_in_bytes"] = pd.to_numeric(
+            df["size_in_bytes"], errors="coerce"
+        ).astype("Int64")
+
     return df
 
 
-def load_topology_df(path: str) -> pd.DataFrame:
-    """Load parquet file into a Pandas dataframe for topology files metadata.
-
-    Parameters
-    ----------
-    path : str
-        Path to the parquet file containing the topology files metadata.
+def _extract_author_records(df: pd.DataFrame) -> list[dict[str, str]]:
+    """Extract and normalize individual author records from datasets frame.
 
     Returns
     -------
-    pd.DataFrame
-        A dataframe containing the topology files metadata.
+    list[dict[str, str]]
+        A list of dictionaries containing author records with dataset linkage.
     """
-    df = pd.read_parquet(
-        path,
-        columns=[
-            "dataset_origin",
-            "dataset_id",
-            "file_name",
-            "atom_number",
-            "has_protein",
-            "has_nucleic",
-            "has_lipid",
-            "has_glucid",
-            "has_water_ion",
-        ],
-    )
-    df = df.rename(
-        columns={
-            "dataset_origin": "data_source",
-            "dataset_id": "dataset_id_in_data_source",
-            "file_name": "name",
-        }
-    )
-    for col in (
-        "has_protein",
-        "has_nucleic",
-        "has_lipid",
-        "has_glucid",
-        "has_water_ion",
-    ):
-        df[col] = df[col].astype(int)
-    df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
-    return df
+    records = []
+    cols = ["id_in_data_source", "data_source_label", "authors"]
+
+    seen_names = set()
+    seen_orcids = set()
+
+    for row in df[cols].dropna(subset=["authors"]).to_dict("records"):
+        authors = row.get("authors")
+        if authors is None:
+            continue
+
+        for author in authors:
+            author_dict = (
+                author.model_dump() if hasattr(author, "model_dump") else author
+            )
+            if not isinstance(author_dict, dict):
+                continue
+
+            full_name = author_dict.get("full_name")
+            orcid = author_dict.get("orcid")
+            orcid = str(orcid).strip() if orcid else None
+
+            if not full_name or full_name in seen_names:
+                continue
+            if orcid and orcid in seen_orcids:
+                continue
+
+            seen_names.add(full_name)
+            if orcid:
+                seen_orcids.add(orcid)
+
+            records.append(
+                {
+                    "data_source_label": row["data_source_label"],
+                    "id_in_data_source": row["id_in_data_source"],
+                    "full_name": full_name,
+                    "orcid": orcid,
+                    "first_name": author_dict.get("first_name"),
+                    "last_name": author_dict.get("last_name"),
+                    "affiliation": author_dict.get("affiliation"),
+                }
+            )
+
+    expected_cols = [
+        "data_source_label",
+        "id_in_data_source",
+        "full_name",
+        "orcid",
+        "first_name",
+        "last_name",
+        "affiliation",
+    ]
+    return pd.DataFrame(records, columns=expected_cols)
 
 
-def load_parameter_df(path: str) -> pd.DataFrame:
-    """Load parquet file into a Pandas dataframe for parameter files metadata.
-
-    Parameters
-    ----------
-    path : str
-        Path to the parquet file containing the parameter files metadata.
+def _extract_paper_records(df: pd.DataFrame) -> list[dict[str, str]]:
+    """Extract external publication links from datasets frame.
 
     Returns
     -------
-    pd.DataFrame
-        A dataframe containing the parameter files metadata.
+    list[dict[str, str]]
+        A list of dictionaries containing paper records with dataset linkage.
     """
-    df = pd.read_parquet(
-        path,
-        columns=[
-            "dataset_origin",
-            "dataset_id",
-            "file_name",
-            "dt",
-            "nsteps",
-            "temperature",
-            "thermostat",
-            "barostat",
-            "integrator",
-        ],
-    )
-    df = df.rename(
-        columns={
-            "dataset_origin": "data_source",
-            "dataset_id": "dataset_id_in_data_source",
-            "file_name": "name",
-        }
-    )
-    df["integrator"] = df["integrator"].fillna("undefined")
-    for col in ("dt", "nsteps", "temperature", "thermostat", "barostat"):
-        df[col] = df[col].where(df[col].notna(), other=None)
-    df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
-    return df
+    records = []
+    cols = ["id_in_data_source", "data_source_label", "external_links"]
+
+    for row in df[cols].dropna(subset=["external_links"]).to_dict("records"):
+        links = row.get("external_links")
+        if links is None:
+            continue
+
+        for link in links:
+            if link:
+                records.append(
+                    {
+                        "data_source_label": row["data_source_label"],
+                        "id_in_data_source": row["id_in_data_source"],
+                        "doi_or_url": str(link).strip(),
+                    }
+                )
+
+    expected_cols = ["data_source_label", "id_in_data_source", "doi_or_url"]
+    return pd.DataFrame(records, columns=expected_cols)
 
 
-def load_trajectory_df(path: str) -> pd.DataFrame:
-    """Load parquet file into a Pandas dataframe for trajectory files metadata.
-
-    Parameters
-    ----------
-    path : str
-        Path to the parquet file containing the trajectory files metadata.
+def _extract_simulation_records(df: pd.DataFrame) -> list[dict[str, str]]:
+    """Extract software, forcefields, timesteps, times, temperatures per dataset.
 
     Returns
     -------
-    pd.DataFrame
-        A dataframe containing the trajectory files metadata.
+    list[dict[str, str]]
+        A list of dictionaries containing simulation records with dataset linkage.
     """
-    df = pd.read_parquet(
-        path,
-        columns=[
-            "dataset_origin",
-            "dataset_id",
-            "file_name",
-            "atom_number",
-            "frame_number",
-        ],
-    )
-    df = df.rename(
-        columns={
-            "dataset_origin": "data_source",
-            "dataset_id": "dataset_id_in_data_source",
-            "file_name": "name",
+    records = []
+    cols = ["id_in_data_source", "data_source_label", "simulation"]
+
+    # Iterate over dict records directly (significantly faster than iterrows)
+    for row in df[cols].dropna(subset=["simulation"]).to_dict("records"):
+        sim = row["simulation"]
+        sim = sim.model_dump() if hasattr(sim, "model_dump") else sim
+        if not isinstance(sim, dict):
+            continue
+
+        base = {
+            "id_in_data_source": row["id_in_data_source"],
+            "data_source_label": row["data_source_label"],
         }
-    )
-    df["dataset_id_in_data_source"] = df["dataset_id_in_data_source"].astype(str)
-    return df
-
-
-# ============================================================================
-# Pipeline — datasets
-#
-# All work happens in SQL after registering two DataFrame views:
-#   _stage_datasets  — one row per dataset (scalar fields)
-#   _stage_authors   — one row per (dataset, author) after exploding the list
-#
-# Steps:
-#   1. Upsert data_sources        — INSERT INTO ... SELECT DISTINCT
-#   2. Upsert authors             — INSERT INTO ... SELECT DISTINCT
-#   3. Insert new datasets        — INSERT INTO ... SELECT ... WHERE NOT EXISTS
-#   4. Update changed datasets    — UPDATE ... FROM view WHERE IS DISTINCT FROM
-#   5. Upsert datasets_authors_link — INSERT OR IGNORE INTO ... SELECT
-# ============================================================================
+        # Process named entity items (Software & Forcefields)
+        for key, category in (
+            ("software", "SOFTWARE"),
+            ("forcefields_models", "FORCEFIELD_MODEL"),
+        ):
+            items = sim.get(key)
+            if items is None:
+                continue
+            for item in items:
+                if isinstance(item, dict) and (name := item.get("name")):
+                    version = item.get("version")
+                    val = f"{name} {version}".strip() if version else name
+                    records.append({**base, "category_label": category, "value": val})
+        # Process scalar lists via mapping configuration
+        for key, category in SIMULATION_CATEGORY_MAPPING:
+            values = sim.get(key)
+            if values is None:
+                continue
+            for val in values:
+                records.append({**base, "category_label": category, "value": str(val)})
+    expected_cols = [
+        "id_in_data_source",
+        "data_source_label",
+        "category_label",
+        "value",
+    ]
+    return pd.DataFrame(records, columns=expected_cols)
 
 
 def ingest_datasets(
@@ -309,147 +298,156 @@ def ingest_datasets(
 ) -> list[int]:
     """Ingest datasets from the given DataFrame into the database.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        A DataFrame containing the datasets metadata to be ingested.
-    db_conn : duckdb.DuckDBPyConnection
-        A connection to the DuckDB database.
-    logger : loguru.Logger, optional
-        A logger for logging messages.
-
     Returns
     -------
     list[int]
+        List of dataset_ids for all datasets in the source, after ingestion.
     """
-    # Build the author-exploded staging frame in pandas (fast, vectorised)
-    ds_stage = df.drop(columns=["author_list"]).copy()
-    author_stage = (
-        df[["id_in_data_source", "data_source", "author_list"]]
-        .explode("author_list")
-        .rename(columns={"author_list": "author_name"})
-        .dropna(subset=["author_name"])
-        .assign(author_name=lambda x: x["author_name"].str.strip())
-        .query("author_name != ''")
+    logger.info("Starting ingestion of datasets into the database.")
+    # Extract staging records using helper functions (keeps complexity low)
+    author_records = _extract_author_records(df)
+    paper_records = _extract_paper_records(df)
+    simulation_records = _extract_simulation_records(df)
+    # Register temporary staging views in DuckDB
+    db_conn.register(
+        "_stage_datasets",
+        df.drop(columns=["authors", "external_links"], errors="ignore"),
     )
-
-    # Register as DuckDB views — zero-copy, DuckDB reads the Arrow buffer directly
-    db_conn.register("_stage_datasets", ds_stage)
-    db_conn.register("_stage_authors", author_stage)
-
-    # ── 1. Upsert data_sources ─────────────────────────────────────────────
+    db_conn.register("_stage_authors", pd.DataFrame(author_records))
+    db_conn.register("_stage_papers", pd.DataFrame(paper_records))
+    db_conn.register("_stage_simulations", pd.DataFrame(simulation_records))
+    # Upsert parent metadata entities
     db_conn.execute("""
-        INSERT INTO data_sources (name, url)
-        SELECT DISTINCT data_source, data_source_url
+        INSERT INTO data_sources (data_source_label, url, citation, comment)
+        SELECT
+            data_source_label,
+            FIRST(data_source_url),
+            FIRST(data_source_citation),
+            FIRST(data_source_comment)
         FROM _stage_datasets
-        WHERE data_source NOT IN (SELECT name FROM data_sources)
-    """)
+        WHERE data_source_label IS NOT NULL
+          AND data_source_label NOT IN (
+            SELECT data_source_label FROM data_sources WHERE data_source_label IS NOT NULL
+        )
+        GROUP BY data_source_label;
 
-    # ── 2. Upsert authors ──────────────────────────────────────────────────
-    db_conn.execute("""
-        INSERT INTO authors (name)
-        SELECT DISTINCT author_name
+        INSERT INTO projects (project_label, url)
+        SELECT
+            project_label,
+            FIRST(url_in_project)
+        FROM _stage_datasets
+        WHERE project_label IS NOT NULL
+          AND project_label NOT IN (
+            SELECT project_label FROM projects WHERE project_label IS NOT NULL
+        )
+        GROUP BY project_label;
+
+        INSERT INTO persons (full_name, orcid, first_name, last_name, affiliation)
+        SELECT 
+            full_name,
+            orcid,
+            first_name,
+            last_name,
+            affiliation
         FROM _stage_authors
-        WHERE author_name NOT IN (SELECT name FROM authors)
-    """)
+        WHERE full_name NOT IN (SELECT full_name FROM persons WHERE full_name IS NOT NULL)
+        AND (orcid IS NULL OR orcid NOT IN (SELECT orcid FROM persons WHERE orcid IS NOT NULL));
 
-    # ── 3. Insert new datasets ─────────────────────────────────────────────
-    n_new = db_conn.execute("""
+        INSERT INTO papers (doi, url, title)
+        SELECT
+            doi_or_url AS doi,
+            doi_or_url AS url,
+            doi_or_url AS title
+        FROM _stage_papers
+        WHERE doi_or_url IS NOT NULL
+          AND doi_or_url NOT IN (
+            SELECT doi FROM papers WHERE doi IS NOT NULL
+        )
+        GROUP BY doi_or_url;
+    """)
+    # Upsert datasets and update existing ones
+    db_conn.execute("""
         INSERT INTO datasets (
-            data_source_id, id_in_data_source, url_in_data_source,
-            doi, date_created, date_last_modified, date_last_crawled,
-            file_number, download_number, view_number,
+            data_source_label, id_in_data_source, url_in_data_source,
+            project_label, doi, date_created, date_last_updated,
+            date_last_fetched, file_number, download_number, view_number,
             license, title, description, keywords
         )
         SELECT
-            src.data_source_id,
-            s.id_in_data_source,
-            s.url_in_data_source,
-            s.doi,
-            s.date_created,
-            s.date_last_modified,
-            s.date_last_crawled,
-            s.file_number,
-            s.download_number,
-            s.view_number,
-            s.license,
-            s.title,
-            s.description,
-            s.keywords
-        FROM _stage_datasets s
-        JOIN data_sources src ON src.name = s.data_source
-        WHERE NOT EXISTS (
-            SELECT 1 FROM datasets d
-            WHERE d.data_source_id    = src.data_source_id
-              AND d.id_in_data_source = s.id_in_data_source
-        )
-    """).fetchone()[0]
-
-    # ── 4. Update changed datasets ─────────────────────────────────────────
-    # IS DISTINCT FROM handles NULL comparisons correctly (unlike !=)
-    n_updated = db_conn.execute("""
+            data_source_label,
+            id_in_data_source,
+            FIRST(url_in_data_source),
+            FIRST(project_label),
+            FIRST(doi),
+            FIRST(date_created),
+            FIRST(date_last_updated),
+            FIRST(date_last_fetched),
+            FIRST(file_number),
+            FIRST(download_number),
+            FIRST(view_number),
+            FIRST(license),
+            FIRST(title),
+            FIRST(description),
+            FIRST(keywords)
+        FROM _stage_datasets
+        GROUP BY data_source_label, id_in_data_source
+        ON CONFLICT (data_source_label, id_in_data_source) DO NOTHING;
+    """)
+    # Update existing datasets
+    db_conn.execute("""
         UPDATE datasets d
         SET
             doi                = s.doi,
-            date_created       = s.date_created,
-            date_last_modified = s.date_last_modified,
-            date_last_crawled  = s.date_last_crawled,
+            date_last_updated = s.date_last_updated,
+            date_last_fetched  = s.date_last_fetched,
             file_number        = s.file_number,
-            url_in_data_source = s.url_in_data_source,
+            download_number    = s.download_number,
+            view_number        = s.view_number,
             title              = s.title,
             description        = s.description,
             keywords           = s.keywords
         FROM _stage_datasets s
-        JOIN data_sources src ON src.name = s.data_source
-        WHERE d.data_source_id    = src.data_source_id
-          AND d.id_in_data_source = s.id_in_data_source
-          AND (
-                d.doi                IS DISTINCT FROM s.doi
-             OR d.date_created       IS DISTINCT FROM s.date_created
-             OR d.date_last_modified IS DISTINCT FROM s.date_last_modified
-             OR d.date_last_crawled  IS DISTINCT FROM s.date_last_crawled
-             OR d.file_number        IS DISTINCT FROM s.file_number
-             OR d.url_in_data_source IS DISTINCT FROM s.url_in_data_source
-             OR d.title              IS DISTINCT FROM s.title
-             OR d.description        IS DISTINCT FROM s.description
-             OR d.keywords           IS DISTINCT FROM s.keywords
-          )
-    """).fetchone()[0]
-
-    # ── 5. Upsert datasets_authors_link ────────────────────────────────────
-    db_conn.execute("""
-        INSERT OR IGNORE INTO datasets_authors_link (dataset_id, author_id)
-        SELECT d.dataset_id, a.author_id
-        FROM _stage_authors sa
-        JOIN data_sources src ON src.name              = sa.data_source
-        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
-                             AND d.id_in_data_source   = sa.id_in_data_source
-        JOIN authors      a   ON a.name                = sa.author_name
+        WHERE d.data_source_label = s.data_source_label
+          AND d.id_in_data_source = s.id_in_data_source;
     """)
-
+    # Insert link between datasets and external paper publications
+    db_conn.execute("""
+        INSERT INTO datasets_papers_link (dataset_id, paper_id)
+        SELECT DISTINCT d.dataset_id, p.paper_id
+        FROM _stage_papers sp
+        JOIN datasets d
+          ON d.data_source_label = sp.data_source_label
+         AND d.id_in_data_source = sp.id_in_data_source
+        JOIN papers p
+          ON p.doi = sp.doi_or_url OR p.url = sp.doi_or_url
+        WHERE NOT EXISTS (
+            SELECT 1 FROM datasets_papers_link dpl
+            WHERE dpl.dataset_id = d.dataset_id
+              AND dpl.paper_id = p.paper_id
+        );
+    """)
     db_conn.commit()
-    db_conn.unregister("_stage_datasets")
-    db_conn.unregister("_stage_authors")
-
-    # Return all dataset_ids for this source (used by the files pipeline)
-    source_names = df["data_source"].unique().tolist()
+    # Clean up staging views
+    for view in (
+        "_stage_datasets",
+        "_stage_authors",
+        "_stage_papers",
+        "_stage_simulations",
+    ):
+        db_conn.unregister(view)
+    # Retrieve dataset_ids for downstream file pipeline
+    sources = df["data_source_label"].unique().tolist()
     all_ids = [
         r[0]
         for r in db_conn.execute(
             """
-            SELECT d.dataset_id
-            FROM datasets d
-            JOIN data_sources src ON src.data_source_id = d.data_source_id
-            WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
-        """,
-            [source_names],
+            SELECT dataset_id FROM datasets
+            WHERE data_source_label IN (SELECT unnest($1::VARCHAR[]))
+            """,
+            [sources],
         ).fetchall()
     ]
-
-    n_total = len(all_ids)
-    logger.success(
-        f"Total datasets: {n_total:,} | new: {n_new:,} | updated: {n_updated:,}"
-    )
+    logger.success(f"Ingested {len(all_ids):,} datasets successfully.")
     return all_ids
 
 
@@ -521,7 +519,7 @@ def ingest_files(
 ) -> None:
     """Bulk-insert file rows for the given dataset_ids."""
     if not dataset_ids:
-        logger.info("No datasets to process — skipping file ingestion.")
+        logger.warning("No datasets to process — skipping file ingestion.")
         return
 
     # Resolve dataset_id in pandas (vectorised map) then filter to eligible only
@@ -620,92 +618,6 @@ def ingest_files(
     logger.success(f"Files ingested — {n:,} total rows for these datasets.")
 
 
-# ============================================================================
-# Pipeline — simulation files (topology / parameter / trajectory)
-#
-# All three: register DataFrame view → one INSERT INTO ... SELECT joining
-# against datasets and files. Zero Python loops, one SQL statement each.
-# ============================================================================
-
-
-def ingest_topology_files(
-    df: pd.DataFrame,
-    conn: duckdb.DuckDBPyConnection,
-    logger: "loguru.Logger" = loguru.logger,
-) -> None:
-    """Ingest topology files from the given DataFrame into the database."""
-    conn.register("_stage_topo", df)
-    conn.execute("""
-        INSERT OR IGNORE INTO topology_files (
-            file_id, atom_number, has_protein, has_nucleic,
-            has_lipid, has_glucid, has_water_ion
-        )
-        SELECT f.file_id, s.atom_number, s.has_protein, s.has_nucleic,
-               s.has_lipid, s.has_glucid, s.has_water_ion
-        FROM _stage_topo s
-        JOIN data_sources src ON src.name              = s.data_source
-        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
-                             AND d.id_in_data_source   = s.dataset_id_in_data_source
-        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
-    """)
-    conn.commit()
-    conn.unregister("_stage_topo")
-    n = conn.execute("SELECT COUNT(*) FROM topology_files").fetchone()[0]
-    logger.success(f"Topology files — {n:,} total rows in DB.")
-
-
-def ingest_parameter_files(
-    df: pd.DataFrame,
-    conn: duckdb.DuckDBPyConnection,
-    logger: "loguru.Logger" = loguru.logger,
-) -> None:
-    """Ingest parameter files from the given DataFrame into the database."""
-    conn.register("_stage_param", df)
-    conn.execute("""
-        INSERT OR IGNORE INTO parameter_files (
-            file_id, dt, nsteps, temperature, thermostat, barostat, integrator
-        )
-        SELECT f.file_id, s.dt, s.nsteps, s.temperature,
-               s.thermostat, s.barostat, s.integrator
-        FROM _stage_param s
-        JOIN data_sources src ON src.name              = s.data_source
-        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
-                             AND d.id_in_data_source   = s.dataset_id_in_data_source
-        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
-    """)
-    conn.commit()
-    conn.unregister("_stage_param")
-    n = conn.execute("SELECT COUNT(*) FROM parameter_files").fetchone()[0]
-    logger.success(f"Parameter files — {n:,} total rows in DB.")
-
-
-def ingest_trajectory_files(
-    df: pd.DataFrame,
-    conn: duckdb.DuckDBPyConnection,
-    logger: "loguru.Logger" = loguru.logger,
-) -> None:
-    """Ingest trajectory files from the given DataFrame into the database."""
-    conn.register("_stage_traj", df)
-    conn.execute("""
-        INSERT OR IGNORE INTO trajectory_files (file_id, atom_number, frame_number)
-        SELECT f.file_id, s.atom_number, s.frame_number
-        FROM _stage_traj s
-        JOIN data_sources src ON src.name              = s.data_source
-        JOIN datasets     d   ON d.data_source_id      = src.data_source_id
-                             AND d.id_in_data_source   = s.dataset_id_in_data_source
-        JOIN files        f   ON f.dataset_id = d.dataset_id AND f.name = s.name
-    """)
-    conn.commit()
-    conn.unregister("_stage_traj")
-    n = conn.execute("SELECT COUNT(*) FROM trajectory_files").fetchone()[0]
-    logger.success(f"Trajectory files — {n:,} total rows in DB.")
-
-
-# ============================================================================
-# Entry point
-# ============================================================================
-
-
 def ingest(
     db_path: Path,
     data_type: str,
@@ -713,22 +625,19 @@ def ingest(
     logger: "loguru.Logger" = loguru.logger,
 ) -> None:
     """Ingest data into the MDverse database."""
-    db_conn = get_db_connection(db_path)
-
-    logger.info(f"Data type  : {data_type}")
-    logger.info(f"Source file: {parquet_path}")
-    logger.info(f"Database   : {db_path.resolve()}")
-
+    logger.info(f"Starting ingestion into MDverse database: {db_path}.")
+    logger.info(f"Data type: {data_type}.")
+    logger.info(f"Source file: {parquet_path}.")
+    mdverse_db = init_db_connection(db_path, read_only=False, logger=logger)
     if data_type == "datasets":
-        ingest_datasets(load_datasets_df(str(parquet_path)), db_conn)
+        ingest_datasets(load_datasets_df(str(parquet_path)), mdverse_db)
 
     elif data_type == "files":
         df = load_files_df(str(parquet_path))
-
         source_names = df["data_source"].unique().tolist()
         all_dataset_ids = [
             r[0]
-            for r in db_conn.execute(
+            for r in mdverse_db.execute(
                 """
                 SELECT d.dataset_id
                 FROM datasets d
@@ -742,7 +651,7 @@ def ingest(
         ids_with_files = (
             {
                 r[0]
-                for r in db_conn.execute(
+                for r in mdverse_db.execute(
                     """
                 SELECT DISTINCT dataset_id FROM files
                 WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
@@ -760,19 +669,10 @@ def ingest(
             logger.info("All datasets already have files — nothing to ingest.")
         else:
             logger.info(f"{len(new_dataset_ids):,} dataset(s) need file ingestion.")
-            _delete_files_for_datasets(db_conn, new_dataset_ids)
-            ingest_files(df, db_conn, dataset_ids=new_dataset_ids)
+            _delete_files_for_datasets(mdverse_db, new_dataset_ids)
+            ingest_files(df, mdverse_db, dataset_ids=new_dataset_ids)
 
-    elif data_type == "topology":
-        ingest_topology_files(load_topology_df(str(parquet_path)), db_conn)
-
-    elif data_type == "parameter":
-        ingest_parameter_files(load_parameter_df(str(parquet_path)), db_conn)
-
-    elif data_type == "trajectory":
-        ingest_trajectory_files(load_trajectory_df(str(parquet_path)), db_conn)
-
-    db_conn.close()
+    mdverse_db.close()
 
 
 @click.command(
@@ -796,7 +696,7 @@ def ingest(
     "--type",
     "data_type",
     type=click.Choice(
-        ["datasets", "files", "topology", "parameter", "trajectory"],
+        ["datasets", "files"],
         case_sensitive=False,
     ),
     required=True,
