@@ -18,7 +18,7 @@ def create_database(
     conn = duckdb.connect(db_path)
     conn.execute(schema_sql)
     conn.close()
-    logger.info(f"Database created: {db_path}")
+    logger.success(f"Created database in {db_path}.")
 
 
 def list_tables(db_path: Path, logger: "loguru.Logger" = loguru.logger) -> None:
@@ -53,7 +53,7 @@ def main(db_path: Path, schema_path: Path) -> None:
     logger = create_logger(logpath=logpath, level="INFO")
     create_database(db_path=db_path, schema_path=schema_path, logger=logger)
     list_tables(db_path=db_path, logger=logger)
-    logger.info(f"Log saved to {logpath}")
+    logger.info(f"Log saved to {logpath}.")
 
 
 if __name__ == "__main__":
