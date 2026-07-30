@@ -97,7 +97,7 @@ class DatasetSourceName(StrEnum):
                 "and share their research outputs."
             ),
             DatasetSourceName.GPCRMD: (
-                "online platform with web-based visualization capabilities and a "
+                "Online platform with web-based visualization capabilities and a "
                 "comprehensive analysis toolbox that allows visualizing, inspecting, "
                 "and analysing GPCR molecular dynamics."
             ),
@@ -132,6 +132,45 @@ class ExternalDatabaseName(StrEnum):
     CHEBI = "chebi"
     PUBCHEM = "pubchem"
     KEGG = "kegg"
+
+    @property
+    def url(self) -> str | None:
+        """Return the base URL for the external database."""
+        urls = {
+            ExternalDatabaseName.PDB: "https://www.rcsb.org/",
+            ExternalDatabaseName.UNIPROT: "https://www.uniprot.org/",
+            ExternalDatabaseName.CHEBI: "https://www.ebi.ac.uk/chebi/",
+            ExternalDatabaseName.PUBCHEM: "https://pubchem.ncbi.nlm.nih.gov/",
+            ExternalDatabaseName.KEGG: "https://www.kegg.jp/",
+        }
+        return urls.get(self)
+
+    @property
+    def comment(self) -> str | None:
+        """Return default descriptive comment for the external database."""
+        comments = {
+            ExternalDatabaseName.PDB: (
+                "Protein Data Bank archive containing 3D biological macromolecular "
+                "structure data."
+            ),
+            ExternalDatabaseName.UNIPROT: (
+                "Comprehensive and freely accessible resource for protein sequence "
+                "and functional information."
+            ),
+            ExternalDatabaseName.CHEBI: (
+                "Chemical Entities of Biological Interest database focused on small "
+                "chemical compounds."
+            ),
+            ExternalDatabaseName.PUBCHEM: (
+                "Open chemistry database at the National Institutes of Health (NIH) "
+                "containing chemical structures and biological activities."
+            ),
+            ExternalDatabaseName.KEGG: (
+                "Kyoto Encyclopedia of Genes and Genomes database resource for "
+                "understanding high-level functions and biological systems."
+            ),
+        }
+        return comments.get(self)
 
 
 class MoleculeType(StrEnum):
