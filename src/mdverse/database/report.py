@@ -188,7 +188,8 @@ def print_data_sources_report(conn: duckdb.DuckDBPyConnection) -> None:
 
 @click.command()
 @click.option(
-    "--db-path",
+    "--db",
+    "db_path",
     type=click.Path(path_type=Path, dir_okay=False),
     required=True,
     help="Path to DuckDB database file.",
