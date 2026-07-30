@@ -39,25 +39,11 @@ CREATE TABLE IF NOT EXISTS annotation_provenances (
                                                           -- "Provided by database"
     comment           VARCHAR UNIQUE
 );
-
-INSERT OR IGNORE INTO annotation_provenances (provenance_label, comment) VALUES
-    ('Manually annotated', 'This annotation was manually curated by a human annotator.'),
-    ('Provided by database', 'This annotation was provided by the original database or data source.'),
-    ('Extracted automatically', 'This annotation was extracted automatically by Artificial Intelligence.');
-
 CREATE TABLE IF NOT EXISTS annotation_categories (
     category_label  VARCHAR PRIMARY KEY,             -- e.g. "MOL"
     label           VARCHAR NOT NULL UNIQUE,              -- "Molecule_names"
     description     VARCHAR
 );
-
-INSERT OR IGNORE INTO annotation_categories (category_label, label) VALUES
-    ('MOL', 'Molecule names'),
-    ('SOFTWARE', 'Software'),
-    ('FORCEFIELD_MODEL', 'Forcefield or model'),
-    ('SIMULATION_TIMESTEP', 'Simulation timestep'),
-    ('SIMULATION_TIME', 'Simulation time'),
-    ('SIMULATION_TEMPERATURE', 'Simulation temperature');
 
 ---------------------------------------------------------------------
 -- Main tables
@@ -66,8 +52,8 @@ INSERT OR IGNORE INTO annotation_categories (category_label, label) VALUES
 CREATE SEQUENCE IF NOT EXISTS person_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS persons (
     person_id    INTEGER PRIMARY KEY DEFAULT nextval('person_id_sequence'),
-    full_name    VARCHAR UNIQUE,
-    orcid        VARCHAR UNIQUE,
+    full_name    VARCHAR NOT NULL UNIQUE,
+    orcid        VARCHAR,
     first_name   VARCHAR,
     last_name    VARCHAR,
     affiliation  VARCHAR
@@ -94,7 +80,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     project_label       VARCHAR REFERENCES projects (project_label),
     id_in_project       VARCHAR,
     url_in_project      VARCHAR,
-    doi                 VARCHAR UNIQUE,
+    doi                 VARCHAR,
     date_created        VARCHAR,                     -- format YYYY-MM-DD
     date_last_updated  VARCHAR,                     -- format YYYY-MM-DD
     date_last_fetched   VARCHAR NOT NULL,            -- format YYYY-MM-DDTHH:MM:SS
@@ -131,7 +117,7 @@ CREATE TABLE IF NOT EXISTS annotations (
     value             VARCHAR NOT NULL,
     category_label    VARCHAR NOT NULL REFERENCES annotation_categories (category_label),
     provenance_label  VARCHAR NOT NULL REFERENCES annotation_provenances (provenance_label),
-    quality_score     DOUBLE,
+    quality_score     DOUBLE CHECK (quality_score IS NULL OR (quality_score >= 0.0 AND quality_score <= 1.0)),
     value_extra       VARCHAR,
     comment           VARCHAR,
     UNIQUE (value, category_label, dataset_id, paper_id, file_id)
@@ -153,8 +139,8 @@ CREATE TABLE IF NOT EXISTS molecules (
 CREATE TABLE IF NOT EXISTS molecules_external_databases (
     molecule_id               INTEGER NOT NULL REFERENCES molecules (molecule_id),
     database_label            VARCHAR NOT NULL REFERENCES databases (database_label),
-    id_in_external_database   VARCHAR UNIQUE,
-    url_in_external_database  VARCHAR UNIQUE,
+    id_in_external_database   VARCHAR,
+    url_in_external_database  VARCHAR,
     PRIMARY KEY (molecule_id, database_label)
 );
 

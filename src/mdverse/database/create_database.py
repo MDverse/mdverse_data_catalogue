@@ -15,9 +15,8 @@ def create_database(
     """Create the MDverse database using the provided SQL schema."""
     logger.info(f"Read SQL schema: {schema_path}")
     schema_sql = schema_path.read_text(encoding="utf-8")
-    conn = duckdb.connect(db_path)
-    conn.execute(schema_sql)
-    conn.close()
+    with duckdb.connect(str(db_path)) as conn:
+        conn.execute(schema_sql)
     logger.success(f"Created database in {db_path}.")
 
 
@@ -47,11 +46,24 @@ def list_tables(db_path: Path, logger: "loguru.Logger" = loguru.logger) -> None:
     required=True,
     help="Path to the SQL schema file.",
 )
-def main(db_path: Path, schema_path: Path) -> None:
+@click.option(
+    "--vocab",
+    "vocab_path",
+    type=click.Path(exists=True, file_okay=True, path_type=Path),
+    required=False,
+    help="Path to the vocabulary SQL file (optional).",
+)
+def main(db_path: Path, schema_path: Path, vocab_path: Path | None) -> None:
     """Create database using the provided SQL schema."""
     logpath = Path("logs/create_database.log")
     logger = create_logger(logpath=logpath, level="INFO")
     create_database(db_path=db_path, schema_path=schema_path, logger=logger)
+    if vocab_path is not None:
+        logger.info(f"Read vocabulary SQL: {vocab_path}")
+        vocab_sql = vocab_path.read_text(encoding="utf-8")
+        with duckdb.connect(str(db_path)) as conn:
+            conn.execute(vocab_sql)
+        logger.success(f"Inserted vocabulary into database from {vocab_path}.")
     list_tables(db_path=db_path, logger=logger)
     logger.info(f"Log saved to {logpath}.")
 
