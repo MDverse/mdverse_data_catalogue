@@ -165,31 +165,7 @@ bash run_all.sh
 ```
 
 > [!WARNING]
-> Be sure, you have have **sufficient** time, ba### Re-ingesting simulation data
-
-If you wish to re-ingest data from any of the following tables:
-
-- **TopologyFile**
-- **ParameterFile**
-- **TrajectoryFile**
-
-You can run these commands:
-
-```sh
-uv run src/ingest_topol_files.py
-```
-
-or
-
-```sh
-uv run src/ingest_param_files.py
-```
-
-or
-
-```sh
-uv run src/ingest_traj_files.py
-ndwidth and disk space to run this command.
+> Be sure, you have have **sufficient** time, bandwidth and disk space to run this command.
 
 ## Upload data on Zenodo (for MDverse maintainers only)
 
@@ -220,10 +196,10 @@ uv run scripts/upload_datasets_to_zenodo.py --record 7856524 \
 ### Create the empty database
 
 ```sh
-uv run database-create --db data/database.duckdb --schema params/database_schema.sql
+uv run database-create --db data/database.duckdb --schema params/queries/database_schema.sql --vocab params/queries/database_vocabularies.sql
 ```
 
-This command reads the schema from `params/database_schema.sql` and creates a new DuckDB database file (`database.duckdb`).
+This command reads the schema from `params/queries/database_schema.sql`, creates a new DuckDB database file (`database.duckdb`) and sets up the database vocabularies from `params/queries/database_vocabularies.sql`.
 
 ### Ingest scraped data
 
@@ -246,10 +222,10 @@ This populates the `files` and `file_types` tables.
 ### Verify the database
 
 ```sh
-uv run database-report
+uv run database-report --db-path data/database.duckdb --schema-outpath docs/database_schema.md
 ```
 
-This will print a summary to the terminal and create a `report.log` file.
+This will print a summary to the terminal and create a `report_db.log` file.
 
 ### Ingesting a single source
 
@@ -263,32 +239,6 @@ uv run database-ingest /path/to/source_files.parquet
 
 The script automatically detects whether the file is a datasets or files
 parquet based on the filename (`_datasets` or `_files`).
-
-### Re-ingesting simulation data
-
-If you wish to re-ingest data from any of the following tables:
-
-- **TopologyFile**
-- **ParameterFile**
-- **TrajectoryFile**
-
-You can run these commands:
-
-```sh
-uv run src/ingest_topol_files.py
-```
-
-or
-
-```sh
-uv run src/ingest_param_files.py
-```
-
-or
-
-```sh
-uv run src/ingest_traj_files.py
-```
 
 ### Delete a dataset or data source
 
