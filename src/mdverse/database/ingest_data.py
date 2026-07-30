@@ -1,7 +1,9 @@
-"""Ingest scraped data into the MDverse database."""
+"""Ingest scraped metadata into the MDverse DuckDB database."""
 
+import re
 import time
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import click
@@ -11,7 +13,8 @@ import numpy as np
 import pandas as pd
 
 from mdverse.core.logger import create_logger
-from mdverse.models.enums import DatasetSourceName
+from mdverse.database.fetch_paper_metadata import fetch_paper_metadata
+from mdverse.models.enums import DatasetSourceName, ExternalDatabaseName
 
 DATASETS_COLUMN_MAPPING = {
     "dataset_repository_name": "data_source_label",
@@ -24,9 +27,10 @@ DATASETS_COLUMN_MAPPING = {
 }
 
 SIMULATION_CATEGORY_MAPPING = [
-    ("simulation_timesteps_in_fs", "SIMULATION_TIMESTEP"),
-    ("simulation_times", "SIMULATION_TIME"),
-    ("simulation_temperatures_in_kelvin", "SIMULATION_TEMPERATURE"),
+    ("total_number_of_atoms", "NATOMS"),
+    ("simulation_timesteps_in_fs", "STIMESTEP"),
+    ("simulation_times", "STIME"),
+    ("simulation_temperatures_in_kelvin", "STEMP"),
 ]
 
 FILES_COLUMN_MAPPING = {
@@ -41,6 +45,8 @@ FILES_COLUMN_MAPPING = {
     "file_size_with_human_readable_unit": "size_human_readable",
 }
 
+DOI_PATTERN = re.compile(r"^10\.\d{4,9}/[-._;()/:A-Za-z0-9]+$")
+
 
 def init_db_connection(
     db_path: Path, *, read_only: bool = False, logger: "loguru.Logger" = loguru.logger
@@ -49,393 +55,469 @@ def init_db_connection(
 
     Returns
     -------
-    duckdb.DuckDBPyConnection
-        A connection object to interact with the DuckDB database.
-
-    Raises
-    ------
-    PermissionError
-        If read or write permissions are missing for the database file or directory.
-    duckdb.IOException
-        If an I/O error or file lock contention occurs while opening the database.
-    duckdb.CatalogException
-        If there is a catalog resolution or database structural issue.
-    duckdb.Error
-        If DuckDB encounters a general error opening or initializing the database.
+        duckdb.DuckDBPyConnection: Database connection object.
     """
     try:
         db = duckdb.connect(str(db_path), read_only=read_only)
         logger.success(f"Successfully connected to DuckDB database at {db_path}.")
         return db
-
-    except PermissionError as e:
-        logger.error(f"Permission denied accessing DuckDB database at {db_path}: {e}")
-        raise
-    except (duckdb.IOException, duckdb.CatalogException) as e:
-        logger.error(f"DuckDB I/O or catalog error opening {db_path}: {e}")
-        raise
-    except duckdb.Error as e:
+    except Exception as e:
         logger.error(f"Failed to connect to DuckDB database at {db_path}: {e}")
         raise
 
 
-def resolve_source_attribute(src_name: str, attr: str) -> str | None:
-    """Resolve a source attribute from the DatasetSourceName enum.
+def resolve_enum_attr(enum_cls: type, key: str, attr: str) -> str | None:
+    """Resolve an attribute from an enum by member name or value.
 
     Returns
     -------
-    str | None
-        The attribute value if the source name is valid, otherwise None.
+        str | None: Resolved attribute value or None.
     """
-    if src_name in DatasetSourceName._value2member_map_:
-        return getattr(DatasetSourceName(src_name), attr)
+    if not key:
+        return None
+    key_upper = str(key).upper()
+    if key_upper in enum_cls.__members__:
+        return getattr(enum_cls[key_upper], attr)
+    if key in enum_cls._value2member_map_:
+        return getattr(enum_cls(key), attr)
     return None
 
 
 def load_datasets_df(parquet_path: str) -> pd.DataFrame:
-    """Load parquet file into a Pandas dataframe for datasets metadata.
+    """Load and process datasets Parquet metadata into a DataFrame.
 
     Returns
     -------
-    pd.DataFrame
-        A dataframe containing the datasets metadata.
+        pd.DataFrame: Formatted datasets DataFrame.
     """
-    df = pd.read_parquet(parquet_path)
-    df = df.rename(columns=DATASETS_COLUMN_MAPPING)
-    # Flatten the keywords list into a single string for database storage.
+    df = pd.read_parquet(parquet_path).rename(columns=DATASETS_COLUMN_MAPPING)
+    # Convert list-like keywords to a semicolon-separated string
     df["keywords"] = df["keywords"].apply(
-        lambda row: " ;".join(row) if isinstance(row, (list, tuple, np.ndarray)) else ""
+        lambda r: " ;".join(r) if isinstance(r, (list, tuple, np.ndarray)) else ""
     )
-    # Convert numeric columns to integers, handling NaN values appropriately.
+    # Convert numeric columns to nullable integer type
     for col in ("file_number", "download_number", "view_number"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-    # Attribute resolution for data source URL, citation, and comment.
-    df["data_source_url"] = df["data_source_label"].apply(
-        lambda src: resolve_source_attribute(src, "url")
-    )
-    df["data_source_citation"] = df["data_source_label"].apply(
-        lambda src: resolve_source_attribute(src, "citation")
-    )
-    df["data_source_comment"] = df["data_source_label"].apply(
-        lambda src: resolve_source_attribute(src, "comment")
-    )
+    # Resolve URLs, citations, and comments for data sources and projects
+    for prefix, source_col in (
+        ("data_source", "data_source_label"),
+        ("project", "project_label"),
+    ):
+        for attr in ("url", "citation", "comment"):
+            # Resolve enum attributes and create new columns
+            df[f"{prefix}_{attr}"] = df[source_col].apply(
+                partial(resolve_enum_attr, DatasetSourceName, attr=attr)
+            )
     return df
 
 
 def load_files_df(parquet_path: str) -> pd.DataFrame:
-    """Load parquet file into a Pandas dataframe for files metadata.
+    """Load and process files Parquet metadata into a DataFrame.
 
     Returns
     -------
-    pd.DataFrame
-        A dataframe containing the files metadata.
+        pd.DataFrame: Formatted files DataFrame.
     """
     df = pd.read_parquet(
-        parquet_path,
-        columns=list(FILES_COLUMN_MAPPING.keys()),
-    )
-    df = df.rename(columns=FILES_COLUMN_MAPPING)
-    # Derive boolean/flag for archive containment.
+        parquet_path, columns=list(FILES_COLUMN_MAPPING.keys())
+    ).rename(columns=FILES_COLUMN_MAPPING)
+    # Add a binary column indicating if the file is from a zip archive
     df["is_from_zip_file"] = df["parent_zip_file_name"].notna().astype(int)
-    # Convert numeric columns to integers, handling NaN values appropriately.
     if "size_in_bytes" in df.columns:
         df["size_in_bytes"] = pd.to_numeric(
             df["size_in_bytes"], errors="coerce"
         ).astype("Int64")
-
     return df
 
 
-def _extract_author_records(df: pd.DataFrame) -> list[dict[str, str]]:
-    """Extract and normalize individual author records from datasets frame.
+def extract_doi(link: str) -> str | None:
+    """Extract and validate a DOI string.
 
     Returns
     -------
-    list[dict[str, str]]
-        A list of dictionaries containing author records with dataset linkage.
+        str | None: Validated DOI or None.
     """
-    records = []
+    if not link:
+        return None
+    clean = str(link).strip().split("doi.org/")[-1]
+    # Reject DOIs from dataset repositories like Zenodo or Figshare
+    if "zenodo" in clean.lower() or "figshare" in clean.lower():
+        return None
+    return clean if DOI_PATTERN.match(clean) else None
+
+
+def _extract_author_records(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract unique author records linked to datasets.
+
+    Returns
+    -------
+        pd.DataFrame: DataFrame containing author records.
+    """
+    records, seen_names, seen_orcids = [], set(), set()
     cols = ["id_in_data_source", "data_source_label", "authors"]
-
-    seen_names = set()
-    seen_orcids = set()
-
     for row in df[cols].dropna(subset=["authors"]).to_dict("records"):
         authors = row.get("authors")
-        if authors is None:
+        if authors is None or (hasattr(authors, "__len__") and len(authors) == 0):
             continue
-
-        for author in authors:
-            author_dict = (
-                author.model_dump() if hasattr(author, "model_dump") else author
-            )
-            if not isinstance(author_dict, dict):
+        # Iterate through authors and extract unique records
+        for auth in authors:
+            a = auth.model_dump() if hasattr(auth, "model_dump") else auth
+            if not isinstance(a, dict):
                 continue
-
-            full_name = author_dict.get("full_name")
-            orcid = author_dict.get("orcid")
+            name, orcid = a.get("full_name"), a.get("orcid")
             orcid = str(orcid).strip() if orcid else None
-
-            if not full_name or full_name in seen_names:
+            # Skip if name is missing, already seen, or ORCID is already seen
+            if not name or name in seen_names or (orcid and orcid in seen_orcids):
                 continue
-            if orcid and orcid in seen_orcids:
-                continue
-
-            seen_names.add(full_name)
+            seen_names.add(name)
             if orcid:
                 seen_orcids.add(orcid)
-
             records.append(
                 {
                     "data_source_label": row["data_source_label"],
                     "id_in_data_source": row["id_in_data_source"],
-                    "full_name": full_name,
+                    "full_name": name,
                     "orcid": orcid,
-                    "first_name": author_dict.get("first_name"),
-                    "last_name": author_dict.get("last_name"),
-                    "affiliation": author_dict.get("affiliation"),
+                    "first_name": a.get("first_name"),
+                    "last_name": a.get("last_name"),
+                    "affiliation": a.get("affiliation"),
                 }
             )
+    return pd.DataFrame(
+        records,
+        columns=[
+            "data_source_label",
+            "id_in_data_source",
+            "full_name",
+            "orcid",
+            "first_name",
+            "last_name",
+            "affiliation",
+        ],
+    )
 
-    expected_cols = [
-        "data_source_label",
-        "id_in_data_source",
-        "full_name",
-        "orcid",
-        "first_name",
-        "last_name",
-        "affiliation",
-    ]
-    return pd.DataFrame(records, columns=expected_cols)
 
-
-def _extract_paper_records(df: pd.DataFrame) -> list[dict[str, str]]:
-    """Extract external publication links from datasets frame.
+def _extract_paper_records(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract valid publication DOIs linked to datasets.
 
     Returns
     -------
-    list[dict[str, str]]
-        A list of dictionaries containing paper records with dataset linkage.
+        pd.DataFrame: DataFrame containing paper records.
     """
     records = []
     cols = ["id_in_data_source", "data_source_label", "external_links"]
-
     for row in df[cols].dropna(subset=["external_links"]).to_dict("records"):
         links = row.get("external_links")
-        if links is None:
-            continue
+        if links is not None and hasattr(links, "__len__") and len(links) > 0:
+            for link in links:
+                doi = extract_doi(link)
+                if doi:
+                    records.append(
+                        {
+                            "data_source_label": row["data_source_label"],
+                            "id_in_data_source": row["id_in_data_source"],
+                            "doi": doi,
+                        }
+                    )
+    return pd.DataFrame(
+        records, columns=["data_source_label", "id_in_data_source", "doi"]
+    )
 
-        for link in links:
-            if link:
-                records.append(
-                    {
-                        "data_source_label": row["data_source_label"],
-                        "id_in_data_source": row["id_in_data_source"],
-                        "doi_or_url": str(link).strip(),
-                    }
-                )
 
-    expected_cols = ["data_source_label", "id_in_data_source", "doi_or_url"]
-    return pd.DataFrame(records, columns=expected_cols)
-
-
-def _extract_simulation_records(df: pd.DataFrame) -> list[dict[str, str]]:
-    """Extract software, forcefields, timesteps, times, temperatures per dataset.
+def _extract_software_ffm_records(sim: dict, base: dict) -> list[dict]:
+    """Extract software (name/version) and forcefield records from simulation.
 
     Returns
     -------
-    list[dict[str, str]]
-        A list of dictionaries containing simulation records with dataset linkage.
+        list[dict]: Extracted software and forcefield annotation records.
     """
-    records = []
-    cols = ["id_in_data_source", "data_source_label", "simulation"]
+    recs = []
+    # Process software items: separate name (SOFTNAME) and version (SOFTVERS)
+    sw_items = sim.get("software")
+    if sw_items is not None and hasattr(sw_items, "__len__") and len(sw_items) > 0:
+        for item in sw_items:
+            # Handle Pydantic models or dicts safely
+            item_dict = item.model_dump() if hasattr(item, "model_dump") else item
+            if isinstance(item_dict, dict):
+                name = item_dict.get("name")
+                if name:
+                    recs.append(
+                        {**base, "category_label": "SOFTNAME", "value": str(name)}
+                    )
+                version = item_dict.get("version")
+                if version:
+                    recs.append(
+                        {
+                            **base,
+                            "category_label": "SOFTVERS",
+                            "value": str(version),
+                        }
+                    )
+    # Process forcefields/models: keep only the name (FFM)
+    ffm_items = sim.get("forcefields_models")
+    if ffm_items is not None and hasattr(ffm_items, "__len__") and len(ffm_items) > 0:
+        for item in ffm_items:
+            item_dict = item.model_dump() if hasattr(item, "model_dump") else item
+            if isinstance(item_dict, dict):
+                name = item_dict.get("name")
+                if name:
+                    recs.append({**base, "category_label": "FFM", "value": str(name)})
 
-    # Iterate over dict records directly (significantly faster than iterrows)
+    return recs
+
+
+def _extract_scalar_records(sim: dict, base: dict) -> list[dict]:
+    """Extract scalar parameter annotations from simulation dictionary.
+
+    Returns
+    -------
+        list[dict]: Extracted scalar parameter records.
+    """
+    recs = []
+    for key, cat in SIMULATION_CATEGORY_MAPPING:
+        vals = sim.get(key)
+        if vals is None:
+            continue
+        # Convert scalar values (int, float) to list, or keep iterable
+        if hasattr(vals, "__len__") and not isinstance(vals, (str, bytes)):
+            val_list = vals
+        else:
+            val_list = [vals]
+        # Safely iterate through elements
+        if hasattr(val_list, "__len__") and len(val_list) > 0:
+            for val in val_list:
+                if val is not None and str(val).strip():
+                    recs.append({**base, "category_label": cat, "value": str(val)})
+
+    return recs
+
+
+def _extract_molecule_records(
+    sim: dict, base: dict, ds: str, src_id: str
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    """Extract molecule entities and external database reference records.
+
+    Returns
+    -------
+        tuple[list[dict], list[dict], list[dict], list[dict]]:
+            Annotation records, molecule details, external DB links, and DB refs.
+    """
+    ann_recs, mol_recs, ext_recs, ref_recs = [], [], [], []
+    mols = sim.get("molecules")
+    # Return empty lists if no molecules are present.
+    if mols is None or not hasattr(mols, "__len__") or len(mols) == 0:
+        return ann_recs, mol_recs, ext_recs, ref_recs
+    # Iterate through molecules and extract relevant details.
+    for mol in mols:
+        m = mol.model_dump() if hasattr(mol, "model_dump") else mol
+        if not isinstance(m, dict) or not (mname := m.get("name")):
+            continue
+        # Create a temporary molID for linking annotations and external references.
+        temp_id = f"{ds}_{src_id}_{mname}"
+        # Append molecule annotation record with category "MOL" and temporary ID.
+        ann_recs.append(
+            {**base, "category_label": "MOL", "value": mname, "temp_mol_id": temp_id}
+        )
+        mol_recs.append(
+            {
+                "temp_mol_id": temp_id,
+                "name": mname,
+                "formula": m.get("formula"),
+                "sequence": m.get("sequence") or "",
+                "organism": m.get("organism"),
+                "molecule_type_label": m.get("type"),
+            }
+        )
+        # Extract external database identifiers and create corresponding records.
+        ext_ids = m.get("external_identifiers")
+        if ext_ids is not None and hasattr(ext_ids, "__len__") and len(ext_ids) > 0:
+            for ext in ext_ids:
+                e = ext.model_dump() if hasattr(ext, "model_dump") else ext
+                if isinstance(e, dict) and e.get("identifier"):
+                    db_name = e.get("database_name")
+                    db_lbl = (
+                        db_name.value if hasattr(db_name, "value") else str(db_name)
+                    )
+                    ext_recs.append(
+                        {
+                            "temp_mol_id": temp_id,
+                            "database_label": db_lbl,
+                            "id_in_external_database": e.get("identifier"),
+                            "url_in_external_database": e.get("url"),
+                        }
+                    )
+                    ref_recs.append(
+                        {
+                            "database_label": db_lbl,
+                            "url": resolve_enum_attr(
+                                ExternalDatabaseName, db_lbl, "url"
+                            )
+                            or "",
+                            "comment": resolve_enum_attr(
+                                ExternalDatabaseName, db_lbl, "comment"
+                            ),
+                        }
+                    )
+
+    return ann_recs, mol_recs, ext_recs, ref_recs
+
+
+def _extract_simulation_records(
+    df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Extract simulation annotations, molecules, and DB references.
+
+    Returns
+    -------
+        tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+            DataFrames for annotations, molecules, external DB links, and DB refs.
+    """
+    ann_recs, mol_recs, ext_recs, ref_recs = [], [], [], []
+    cols = ["id_in_data_source", "data_source_label", "simulation"]
+    # Iterate through rows with non-null simulation data and extract records.
     for row in df[cols].dropna(subset=["simulation"]).to_dict("records"):
         sim = row["simulation"]
         sim = sim.model_dump() if hasattr(sim, "model_dump") else sim
         if not isinstance(sim, dict):
             continue
 
+        ds, src_id = row["data_source_label"], row["id_in_data_source"]
+        # Determine provenance label based on data source.
+        # (e.g., "Manually_annotated" for Atlas, otherwise "Provided_by_database").
+        prov = (
+            "Manually_annotated"
+            if str(ds).lower() == "atlas"
+            else "Provided_by_database"
+        )
         base = {
-            "id_in_data_source": row["id_in_data_source"],
-            "data_source_label": row["data_source_label"],
+            "id_in_data_source": src_id,
+            "data_source_label": ds,
+            "provenance_label": prov,
+            "quality_score": 1.0,
         }
-        # Process named entity items (Software & Forcefields)
-        for key, category in (
-            ("software", "SOFTWARE"),
-            ("forcefields_models", "FORCEFIELD_MODEL"),
-        ):
-            items = sim.get(key)
-            if items is None:
-                continue
-            for item in items:
-                if isinstance(item, dict) and (name := item.get("name")):
-                    version = item.get("version")
-                    val = f"{name} {version}".strip() if version else name
-                    records.append({**base, "category_label": category, "value": val})
-        # Process scalar lists via mapping configuration
-        for key, category in SIMULATION_CATEGORY_MAPPING:
-            values = sim.get(key)
-            if values is None:
-                continue
-            for val in values:
-                records.append({**base, "category_label": category, "value": str(val)})
-    expected_cols = [
-        "id_in_data_source",
-        "data_source_label",
-        "category_label",
-        "value",
-    ]
-    return pd.DataFrame(records, columns=expected_cols)
+        # Extract software, forcefield, and scalar parameter records.
+        ann_recs.extend(_extract_software_ffm_records(sim, base))
+        ann_recs.extend(_extract_scalar_records(sim, base))
+        # Extract molecule records and related external database references.
+        m_anns, m_details, m_exts, m_refs = _extract_molecule_records(
+            sim, base, ds, src_id
+        )
+        # Append extracted molecule-related records to the main lists.
+        ann_recs.extend(m_anns)
+        mol_recs.extend(m_details)
+        ext_recs.extend(m_exts)
+        ref_recs.extend(m_refs)
+
+    return (
+        pd.DataFrame(
+            ann_recs,
+            columns=[
+                "id_in_data_source",
+                "data_source_label",
+                "category_label",
+                "value",
+                "provenance_label",
+                "quality_score",
+                "temp_mol_id",
+            ],
+        ),
+        pd.DataFrame(
+            mol_recs,
+            columns=[
+                "temp_mol_id",
+                "name",
+                "formula",
+                "sequence",
+                "organism",
+                "molecule_type_label",
+            ],
+        ),
+        pd.DataFrame(
+            ext_recs,
+            columns=[
+                "temp_mol_id",
+                "database_label",
+                "id_in_external_database",
+                "url_in_external_database",
+            ],
+        ),
+        pd.DataFrame(
+            ref_recs, columns=["database_label", "url", "comment"]
+        ).drop_duplicates(subset=["database_label"]),
+    )
+
+
+def enrich_papers_and_authors(
+    staged_papers_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Enrich paper metadata via API and extract author records.
+
+    Returns
+    -------
+        tuple[pd.DataFrame, pd.DataFrame]: Enriched paper and author DataFrames.
+    """
+    cols = ["doi", "title", "year", "url", "abstract", "journal", "keywords"]
+    if staged_papers_df.empty:
+        return pd.DataFrame(columns=cols), pd.DataFrame()
+    enriched, authors = [], []
+    # Iterate through unique DOIs and fetch metadata, extracting authors.
+    for doi in staged_papers_df["doi"].dropna().unique():
+        meta = fetch_paper_metadata(doi, email="")
+        authors.extend(meta.pop("authors", []) or [])
+        enriched.append(meta)
+    return pd.DataFrame(enriched, columns=cols), pd.DataFrame(authors)
 
 
 def ingest_datasets(
     df: pd.DataFrame,
     db_conn: duckdb.DuckDBPyConnection,
+    sql_path: Path = Path("params/queries/ingest_datasets.sql"),
     logger: "loguru.Logger" = loguru.logger,
 ) -> list[int]:
-    """Ingest datasets from the given DataFrame into the database.
+    """Ingest datasets metadata and related entities into DuckDB.
 
     Returns
     -------
-    list[int]
-        List of dataset_ids for all datasets in the source, after ingestion.
+        list[int]: List of ingested dataset IDs.
     """
-    logger.info("Starting ingestion of datasets into the database.")
-    # Extract staging records using helper functions (keeps complexity low)
-    author_records = _extract_author_records(df)
+    # Register temporary views
+    # for datasets, authors, papers, annotations, molecules, and external DB references.
+    stage_authors = _extract_author_records(df)
     paper_records = _extract_paper_records(df)
-    simulation_records = _extract_simulation_records(df)
-    # Register temporary staging views in DuckDB
-    db_conn.register(
-        "_stage_datasets",
-        df.drop(columns=["authors", "external_links"], errors="ignore"),
-    )
-    db_conn.register("_stage_authors", pd.DataFrame(author_records))
-    db_conn.register("_stage_papers", pd.DataFrame(paper_records))
-    db_conn.register("_stage_simulations", pd.DataFrame(simulation_records))
-    # Upsert parent metadata entities
-    db_conn.execute("""
-        INSERT INTO data_sources (data_source_label, url, citation, comment)
-        SELECT
-            data_source_label,
-            FIRST(data_source_url),
-            FIRST(data_source_citation),
-            FIRST(data_source_comment)
-        FROM _stage_datasets
-        WHERE data_source_label IS NOT NULL
-          AND data_source_label NOT IN (
-            SELECT data_source_label FROM data_sources WHERE data_source_label IS NOT NULL
+    ann_df, mol_df, ext_db_df, ref_db_df = _extract_simulation_records(df)
+    # Enrich paper metadata and extract author records via API.
+    enriched_papers, crossref_authors = enrich_papers_and_authors(paper_records)
+    if not crossref_authors.empty:
+        stage_authors = pd.concat([stage_authors, crossref_authors], ignore_index=True)
+    if not stage_authors.empty:
+        stage_authors = stage_authors.drop_duplicates(
+            subset=["full_name"], keep="first"
         )
-        GROUP BY data_source_label;
-
-        INSERT INTO projects (project_label, url)
-        SELECT
-            project_label,
-            FIRST(url_in_project)
-        FROM _stage_datasets
-        WHERE project_label IS NOT NULL
-          AND project_label NOT IN (
-            SELECT project_label FROM projects WHERE project_label IS NOT NULL
-        )
-        GROUP BY project_label;
-
-        INSERT INTO persons (full_name, orcid, first_name, last_name, affiliation)
-        SELECT 
-            full_name,
-            orcid,
-            first_name,
-            last_name,
-            affiliation
-        FROM _stage_authors
-        WHERE full_name NOT IN (SELECT full_name FROM persons WHERE full_name IS NOT NULL)
-        AND (orcid IS NULL OR orcid NOT IN (SELECT orcid FROM persons WHERE orcid IS NOT NULL));
-
-        INSERT INTO papers (doi, url, title)
-        SELECT
-            doi_or_url AS doi,
-            doi_or_url AS url,
-            doi_or_url AS title
-        FROM _stage_papers
-        WHERE doi_or_url IS NOT NULL
-          AND doi_or_url NOT IN (
-            SELECT doi FROM papers WHERE doi IS NOT NULL
-        )
-        GROUP BY doi_or_url;
-    """)
-    # Upsert datasets and update existing ones
-    db_conn.execute("""
-        INSERT INTO datasets (
-            data_source_label, id_in_data_source, url_in_data_source,
-            project_label, doi, date_created, date_last_updated,
-            date_last_fetched, file_number, download_number, view_number,
-            license, title, description, keywords
-        )
-        SELECT
-            data_source_label,
-            id_in_data_source,
-            FIRST(url_in_data_source),
-            FIRST(project_label),
-            FIRST(doi),
-            FIRST(date_created),
-            FIRST(date_last_updated),
-            FIRST(date_last_fetched),
-            FIRST(file_number),
-            FIRST(download_number),
-            FIRST(view_number),
-            FIRST(license),
-            FIRST(title),
-            FIRST(description),
-            FIRST(keywords)
-        FROM _stage_datasets
-        GROUP BY data_source_label, id_in_data_source
-        ON CONFLICT (data_source_label, id_in_data_source) DO NOTHING;
-    """)
-    # Update existing datasets
-    db_conn.execute("""
-        UPDATE datasets d
-        SET
-            doi                = s.doi,
-            date_last_updated = s.date_last_updated,
-            date_last_fetched  = s.date_last_fetched,
-            file_number        = s.file_number,
-            download_number    = s.download_number,
-            view_number        = s.view_number,
-            title              = s.title,
-            description        = s.description,
-            keywords           = s.keywords
-        FROM _stage_datasets s
-        WHERE d.data_source_label = s.data_source_label
-          AND d.id_in_data_source = s.id_in_data_source;
-    """)
-    # Insert link between datasets and external paper publications
-    db_conn.execute("""
-        INSERT INTO datasets_papers_link (dataset_id, paper_id)
-        SELECT DISTINCT d.dataset_id, p.paper_id
-        FROM _stage_papers sp
-        JOIN datasets d
-          ON d.data_source_label = sp.data_source_label
-         AND d.id_in_data_source = sp.id_in_data_source
-        JOIN papers p
-          ON p.doi = sp.doi_or_url OR p.url = sp.doi_or_url
-        WHERE NOT EXISTS (
-            SELECT 1 FROM datasets_papers_link dpl
-            WHERE dpl.dataset_id = d.dataset_id
-              AND dpl.paper_id = p.paper_id
-        );
-    """)
-    db_conn.commit()
-    # Clean up staging views
-    for view in (
-        "_stage_datasets",
-        "_stage_authors",
-        "_stage_papers",
-        "_stage_simulations",
-    ):
-        db_conn.unregister(view)
-    # Retrieve dataset_ids for downstream file pipeline
+    # Register temporary views for ingestion.
+    views = {
+        "_stage_datasets": df.drop(
+            columns=["authors", "external_links"], errors="ignore"
+        ),
+        "_stage_authors": stage_authors,
+        "_stage_papers": enriched_papers,
+        "_stage_paper_links": paper_records,
+        "_stage_annotations": ann_df,
+        "_stage_molecules": mol_df,
+        "_stage_molecules_ext_db": ext_db_df,
+        "_stage_ref_databases": ref_db_df,
+    }
+    for name, view_df in views.items():
+        db_conn.register(name, view_df)
+    # Execute the ingestion SQL script and commit the transaction.
+    try:
+        db_conn.execute(sql_path.read_text(encoding="utf-8"))
+        db_conn.commit()
+    finally:
+        # Unregister temporary views to clean up the database connection.
+        for name in views:
+            db_conn.unregister(name)
+    # Retrieve the list of ingested dataset IDs based on the data source labels.
     sources = df["data_source_label"].unique().tolist()
     all_ids = [
         r[0]
@@ -451,171 +533,24 @@ def ingest_datasets(
     return all_ids
 
 
-# ============================================================================
-# Pipeline — files
-#
-# Two-pass SQL strategy handles parent-zip references without Python loops:
-#   Pass 1 — insert all top-level files (is_from_zip_file = 0),
-#             including zip archives themselves.
-#   Pass 2 — insert zip-child files; parent_zip_file_id resolved via
-#             a self-join on files already inserted in pass 1.
-# ============================================================================
-
-
-def _delete_files_for_datasets(
-    conn: duckdb.DuckDBPyConnection,
-    dataset_ids: list[int],
-    logger: "loguru.Logger" = loguru.logger,
-) -> None:
-    """Delete all files and their simulation children for the given datasets."""
-    if not dataset_ids:
-        return
-    # Remove files for the topology_files table.
-    conn.execute(
-        """
-        DELETE FROM topology_files
-        WHERE file_id IN (
-            SELECT file_id FROM files
-            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-        )
-        """,
-        [dataset_ids],
-    )
-    # Remove files for the parameter_files table.
-    conn.execute(
-        """
-        DELETE FROM parameter_files
-        WHERE file_id IN (
-            SELECT file_id FROM files
-            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-        )
-        """,
-        [dataset_ids],
-    )
-    # Remove files for the trajectory_files table.
-    conn.execute(
-        """
-        DELETE FROM trajectory_files
-        WHERE file_id IN (
-            SELECT file_id FROM files
-            WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-        )
-        """,
-        [dataset_ids],
-    )
-    conn.execute(
-        "DELETE FROM files WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))",
-        [dataset_ids],
-    )
-    conn.commit()
-    logger.info(f"Deleted existing files for {len(dataset_ids):,} dataset(s).")
-
-
 def ingest_files(
     df: pd.DataFrame,
-    conn: duckdb.DuckDBPyConnection,
-    dataset_ids: list[int],
+    db_conn: duckdb.DuckDBPyConnection,
+    sql_path: Path = Path("params/queries/ingest_files.sql"),
     logger: "loguru.Logger" = loguru.logger,
 ) -> None:
-    """Bulk-insert file rows for the given dataset_ids."""
-    if not dataset_ids:
-        logger.warning("No datasets to process — skipping file ingestion.")
-        return
-
-    # Resolve dataset_id in pandas (vectorised map) then filter to eligible only
-    ds_map = {
-        (r[0], r[1]): r[2]
-        for r in conn.execute("""
-            SELECT src.name, d.id_in_data_source, d.dataset_id
-            FROM datasets d
-            JOIN data_sources src ON src.data_source_id = d.data_source_id
-        """).fetchall()
-    }
-    eligible = set(dataset_ids)
-    df = df.copy()
-    df["dataset_id"] = df.apply(
-        lambda r: ds_map.get((r["data_source"], r["dataset_id_in_data_source"])),
-        axis=1,
-    )
-    df = df[df["dataset_id"].isin(eligible)].reset_index(drop=True)
-
+    """Ingest files metadata into DuckDB."""
     if df.empty:
-        logger.info("No matching datasets found in files parquet — nothing to ingest.")
+        logger.warning("No files to ingest, skipping.")
         return
-
-    conn.register("_stage_files", df)
-
-    # ── Upsert file_types ──────────────────────────────────────────────────
-    conn.execute("""
-        INSERT INTO file_types (name)
-        SELECT DISTINCT file_type_name
-        FROM _stage_files
-        WHERE file_type_name IS NOT NULL
-          AND file_type_name NOT IN (SELECT name FROM file_types)
-    """)
-
-    # ── Pass 1: top-level files (not inside a zip) ─────────────────────────
-    conn.execute("""
-        INSERT INTO files (
-            dataset_id, name, file_type_id, size_in_bytes,
-            md5, url, is_from_zip_file, parent_zip_file_id
-        )
-        SELECT
-            s.dataset_id,
-            s.name,
-            ft.file_type_id,
-            s.size_in_bytes,
-            s.md5,
-            s.url,
-            s.is_from_zip_file,
-            NULL
-        FROM _stage_files s
-        JOIN file_types ft ON ft.name = s.file_type_name
-        WHERE s.is_from_zip_file = 0
-          AND NOT EXISTS (
-              SELECT 1 FROM files f
-              WHERE f.dataset_id = s.dataset_id AND f.name = s.name
-          )
-    """)
-
-    # ── Pass 2: zip-child files — parent now exists from pass 1 ───────────
-    conn.execute("""
-        INSERT INTO files (
-            dataset_id, name, file_type_id, size_in_bytes,
-            md5, url, is_from_zip_file, parent_zip_file_id
-        )
-        SELECT
-            s.dataset_id,
-            s.name,
-            ft.file_type_id,
-            s.size_in_bytes,
-            s.md5,
-            s.url,
-            s.is_from_zip_file,
-            parent.file_id
-        FROM _stage_files s
-        JOIN file_types ft ON ft.name = s.file_type_name
-        LEFT JOIN files parent
-               ON parent.dataset_id = s.dataset_id
-              AND parent.name       = s.parent_zip_file_name
-        WHERE s.is_from_zip_file = 1
-          AND NOT EXISTS (
-              SELECT 1 FROM files f
-              WHERE f.dataset_id = s.dataset_id AND f.name = s.name
-          )
-    """)
-
-    conn.commit()
-    conn.unregister("_stage_files")
-
-    n = conn.execute(
-        """
-        SELECT COUNT(*) FROM files
-        WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-    """,
-        [dataset_ids],
-    ).fetchone()[0]
-    logger.success(f"Files ingested — {n:,} total rows for these datasets.")
+    # Register the files DataFrame as a temporary view for ingestion.
+    db_conn.register("_stage_files", df)
+    try:
+        db_conn.execute(sql_path.read_text(encoding="utf-8"))
+        db_conn.commit()
+    finally:
+        db_conn.unregister("_stage_files")
+    logger.success(f"Ingested {len(df):,} files successfully.")
 
 
 def ingest(
@@ -624,95 +559,50 @@ def ingest(
     parquet_path: Path,
     logger: "loguru.Logger" = loguru.logger,
 ) -> None:
-    """Ingest data into the MDverse database."""
-    logger.info(f"Starting ingestion into MDverse database: {db_path}.")
-    logger.info(f"Data type: {data_type}.")
-    logger.info(f"Source file: {parquet_path}.")
-    mdverse_db = init_db_connection(db_path, read_only=False, logger=logger)
+    """Route and execute data ingestion based on data type."""
+    logger.info(f"Starting {data_type} ingestion into {db_path} from {parquet_path}.")
+    db = init_db_connection(db_path, read_only=False, logger=logger)
+
     if data_type == "datasets":
-        ingest_datasets(load_datasets_df(str(parquet_path)), mdverse_db)
-
+        ingest_datasets(load_datasets_df(str(parquet_path)), db, logger=logger)
     elif data_type == "files":
-        df = load_files_df(str(parquet_path))
-        source_names = df["data_source"].unique().tolist()
-        all_dataset_ids = [
-            r[0]
-            for r in mdverse_db.execute(
-                """
-                SELECT d.dataset_id
-                FROM datasets d
-                JOIN data_sources src ON src.data_source_id = d.data_source_id
-                WHERE src.name IN (SELECT unnest($1::VARCHAR[]))
-            """,
-                [source_names],
-            ).fetchall()
-        ]
+        ingest_files(load_files_df(str(parquet_path)), db, logger=logger)
 
-        ids_with_files = (
-            {
-                r[0]
-                for r in mdverse_db.execute(
-                    """
-                SELECT DISTINCT dataset_id FROM files
-                WHERE dataset_id IN (SELECT unnest($1::INTEGER[]))
-            """,
-                    [all_dataset_ids],
-                ).fetchall()
-            }
-            if all_dataset_ids
-            else set()
-        )
-
-        new_dataset_ids = [d for d in all_dataset_ids if d not in ids_with_files]
-
-        if not new_dataset_ids:
-            logger.info("All datasets already have files — nothing to ingest.")
-        else:
-            logger.info(f"{len(new_dataset_ids):,} dataset(s) need file ingestion.")
-            _delete_files_for_datasets(mdverse_db, new_dataset_ids)
-            ingest_files(df, mdverse_db, dataset_ids=new_dataset_ids)
-
-    mdverse_db.close()
+    db.close()
 
 
-@click.command(
-    help="Ingest data into the MDverse database.",
-)
+@click.command(help="Ingest data into the MDverse database.")
 @click.option(
     "--db",
     "db_path",
     type=click.Path(exists=True, file_okay=True, path_type=Path),
     required=True,
-    help="Path to the DuckDB database file.",
+    help="Path to DuckDB database file.",
 )
 @click.option(
     "--parquet",
     "parquet_path",
     type=click.Path(exists=True, file_okay=True, path_type=Path),
     required=True,
-    help="Path to the parquet file.",
+    help="Path to input Parquet file.",
 )
 @click.option(
     "--type",
     "data_type",
-    type=click.Choice(
-        ["datasets", "files"],
-        case_sensitive=False,
-    ),
+    type=click.Choice(["datasets", "files", "papers"], case_sensitive=False),
     required=True,
-    help="Define data type to be ingested.",
+    help="Define data type to ingest.",
 )
 def main(db_path: Path, parquet_path: Path, data_type: str) -> None:
-    """Ingest data into the MDverse database."""
-    logpath = Path("logs/ingest_data_into_database.log")
-    logger = create_logger(logpath=logpath, level="INFO")
+    """CLI entry point for data ingestion."""
+    logger = create_logger(
+        logpath=Path("logs/ingest_data_into_database.log"), level="INFO"
+    )
     start_time = time.perf_counter()
     ingest(db_path, data_type, parquet_path, logger=logger)
-    elapsed_time = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[
-        0
-    ]
-    logger.info(f"Total time: {elapsed_time}")
-    logger.success("Done.")
+    elapsed = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[0]
+    logger.info(f"Total time: {elapsed}")
+    logger.info("Done.")
 
 
 if __name__ == "__main__":
