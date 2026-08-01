@@ -24,6 +24,15 @@ class DatasetSourceName(StrEnum):
     MDPOSIT_INRIA_NODE = "mdposit_inria_node"
     MDPOSIT_MMB_NODE = "mdposit_mmb_node"
     MDPOSIT_CINECA_NODE = "mdposit_cineca_node"
+    HUGGINGFACE = "huggingface"
+
+
+class PublicationSourceName(StrEnum):
+    """Molecular dynamics publication sources."""
+
+    EUROPE_PMC = "europe_pmc"
+    HUGGINGFACE = "huggingface"
+    ARXIV = "arxiv"
 
 
 class ExternalDatabaseName(StrEnum):
