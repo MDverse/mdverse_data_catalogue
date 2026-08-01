@@ -91,6 +91,18 @@ Generate a visual diagram of the Pydantic models schema to see how MDverse entit
 uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
 ```
 
+## Scrape MD publications
+
+To scrape Open Access molecular dynamics publications from the [Europe PMC](https://europepmc.org/) database and the [HuggingFace](https://huggingface.co/) repository, run the following command:
+
+```sh
+uv run scrape-papers --output-path  data/md_papers.parquet --hf --pmc --nb-test 10
+uv run scrape-papers --output-path  data/md_papers.parquet --hf --pmc
+```
+
+> [!NOTE]
+> The first command is for testing purposes and will scrape only 10 papers per source. The second command will scrape all available papers. The results will be saved in `data/md_papers.parquet`.
+
 ## Analyze Gromacs mdp and gro files
 
 ### Download files

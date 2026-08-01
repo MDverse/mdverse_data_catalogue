@@ -90,6 +90,7 @@ scrape-gpcrmd = "mdverse.scrapers.gpcrmd:main"
 scrape-mddb = "mdverse.scrapers.mddb:main"
 get-scrapers-stats = "mdverse.scrapers.stats:main"
 draw-pydantic-schema = "mdverse.models.draw_pydantic_schema:main"
+scrape-papers = "mdverse.scrapers.papers:main"
 # Database
 database-create = "mdverse.database.create_database:main"
 database-ingest = "mdverse.database.ingest_data:main"
