@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from mdverse.models.person import Person
+
 from .date import DATETIME_FORMAT
 from .enums import DatasetSourceName
 from .simulation import SimulationMetadata
@@ -57,7 +59,7 @@ class DatasetCoreMetadata(BaseModel):
 # =====================================================================
 # Dataset-level metadata
 # =====================================================================
-class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
+class DatasetMetadata(DatasetCoreMetadata):
     """
     Base Pydantic model for molecular dynamics datasets.
 
@@ -110,16 +112,16 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
         ...,
         description="Title of the dataset.",
     )
-    author_names: list[str] | None = Field(
-        None,
-        description="List of author or contributor names.",
+    authors: list[Person] = Field(
+        default_factory=list,
+        description="List of authors associated with the dataset.",
     )
     description: str | None = Field(
         None,
         description="Description of the dataset.",
     )
-    keywords: list[str] | None = Field(
-        None, description="List of keywords describing the dataset."
+    keywords: list[str] = Field(
+        default_factory=list, description="List of keywords describing the dataset."
     )
     license: str | None = Field(
         None,
@@ -132,9 +134,13 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
             "Must start with '10.' and follow the DOI format."
         ),
     )
-    external_links: list[str] | None = Field(
-        None,
+    external_links: list[str] = Field(
+        default_factory=list,
         description="External links to publications or other databases.",
+    )
+    simulation: SimulationMetadata | None = Field(
+        None,
+        description="Simulation metadata associated with the dataset.",
     )
 
     # ------------------------------------------------------------------
@@ -168,13 +174,6 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
     def format_dates(cls, value: datetime | str | None) -> str | None:
         """Convert datetime objects or strings to '%Y-%m-%dT%H:%M:%S' format.
 
-        Parameters
-        ----------
-        cls : type[DatasetMetadata]
-            The Pydantic model class being validated.
-        value : datetime | str | None
-            The input value of the 'date' field to validate.
-
         Returns
         -------
         str:
@@ -185,37 +184,6 @@ class DatasetMetadata(SimulationMetadata, DatasetCoreMetadata):
         if isinstance(value, datetime):
             return value.strftime(DATETIME_FORMAT)
         return datetime.fromisoformat(value).strftime(DATETIME_FORMAT)
-
-    @field_validator(
-        "description",
-        "keywords",
-        "external_links",
-        "license",
-        "author_names",
-        mode="before",
-    )
-    @classmethod
-    def empty_to_none(cls, value: list | str | None) -> list | str | None:
-        """
-        Normalize empty fields to None.
-
-        Parameters
-        ----------
-        cls : type[BaseDataset]
-            The Pydantic model class being validated.
-        value : Optional[list | str]
-            The raw input value of the field before conversion.
-            Can be a list, a string, or None.
-
-        Returns
-        -------
-        list | str | None
-            Returns None if the value is an empty list or empty string;
-            otherwise returns the original value.
-        """
-        if value == [] or not value:
-            return None
-        return value
 
     @model_validator(mode="after")
     def fill_project_fields_from_repository(self) -> "DatasetMetadata":

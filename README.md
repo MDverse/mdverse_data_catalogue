@@ -83,6 +83,14 @@ Aggregated results are stored in the `data/` folder in `stats_*.tsv` files.
 
 The notebook `notebooks/scraper_stats.ipynb` provides more in-depth analysis and figures.
 
+### Visualise Pydantic schemas
+
+Generate a visual diagram of the Pydantic models schema to see how MDverse entities (datasets, simulations, files, and publications) link together:
+
+```sh
+uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
+```
+
 ## Analyze Gromacs mdp and gro files
 
 ### Download files

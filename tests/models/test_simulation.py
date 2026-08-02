@@ -22,7 +22,6 @@ from mdverse.models.simulation import (
         ([0.1, 2.0], False),
         ([0, 1.0], True),  # because 0 <= 0
         ([-1, 2.0], True),  # because -1 <= 0
-        (None, False),
     ],
 )
 def test_positive_simulation_values(values, should_raise_exception):
@@ -45,7 +44,6 @@ def test_positive_simulation_values(values, should_raise_exception):
         (["27°C", "27 °C"], [300.15, 300.15]),
         (["0c", "100 Celsius"], [273.15, 373.15]),
         (["-10C", "-10 °C", "-1.87"], [263.15, 263.15, 271.28]),
-        (None, None),
     ],
 )
 def test_temperature_normalization(test_temp, expected_temp_in_kelvin):

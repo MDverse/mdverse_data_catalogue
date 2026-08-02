@@ -59,6 +59,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "erdantic>=1.2.1",
     "jupyterlab>=4.4.9",
     "matplotlib>=3.10.1",
     "plotly>=6.0.0",
@@ -89,6 +90,7 @@ scrape-atlas = "mdverse.scrapers.atlas:main"
 scrape-gpcrmd = "mdverse.scrapers.gpcrmd:main"
 scrape-mddb = "mdverse.scrapers.mddb:main"
 get-scrapers-stats = "mdverse.scrapers.stats:main"
+draw-pydantic-schema = "mdverse.models.draw_pydantic_schema:main"
 # Database
 database-create = "mdverse.database.create_database:main"
 database-ingest = "mdverse.database.ingest_data:main"
