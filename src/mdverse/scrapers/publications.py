@@ -440,7 +440,14 @@ def parse_hf_record(
         return None
     time.sleep(0.5)
     resp = safe_get(client, f"{HF_BASE_URL}/api/papers/{paper_id}")
-    paper_details = resp.json() if resp.status_code == 200 else raw_item
+    if resp.status_code == 200:
+        try:
+            paper_details = resp.json()
+        except ValueError as err:
+            logger.warning(f"[HF] Could not decode JSON details for {paper_id}: {err}.")
+            paper_details = raw_item
+        else:
+            paper_details = raw_item
     arxiv_doi = f"10.48550/arxiv.{paper_id}".lower()
     pub_date = paper_details.get("publishedAt") or ""
     publication_year = str(pub_date)[:4]
@@ -763,13 +770,8 @@ def export_papers_to_parquet(
     output_path: Path,
     client: httpx.Client,
     logger: "loguru.Logger",
-) -> pd.DataFrame:
-    """Enrich and export combined paper records to Parquet file.
-
-    Returns
-    -------
-        pd.DataFrame: Updated combined DataFrame.
-    """
+) -> None:
+    """Enrich and export combined paper records to Parquet file."""
     enriched_papers = [
         enrich_paper_record(client, paper, logger) for paper in new_papers
     ]
@@ -785,7 +787,6 @@ def export_papers_to_parquet(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined_df.to_parquet(output_path, index=False)
     logger.success(f"Batch saved to {output_path.name}.")
-    return combined_df
 
 
 @click.command(
@@ -911,7 +912,7 @@ def main(
             )
     # Final batch save if any pending papers remain.
     if pending_batch:
-        existing_df = export_papers_to_parquet(
+        export_papers_to_parquet(
             existing_df, pending_batch, output_path, client, logger
         )
     total_scraped = pmc_scraped_count + hf_scraped_count
