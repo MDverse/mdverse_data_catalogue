@@ -6,7 +6,6 @@ from mdverse.models.ai_model import AiModelCoreMetadata
 from mdverse.models.dataset import DOI, DatasetCoreMetadata
 from mdverse.models.enums import PublicationSourceName
 from mdverse.models.person import Person
-from mdverse.models.simulation import SimulationMetadata
 
 
 class PublicationCoreMetadata(BaseModel):
@@ -60,19 +59,16 @@ class PublicationMetadata(PublicationCoreMetadata):
         default_factory=list,
         description="List of keywords associated with the publication.",
     )
-    # ------------------------------------------------------------------
-    # Simulation & Methods fields
-    # ------------------------------------------------------------------
-    simulation: SimulationMetadata | None = Field(
-        None,
-        description="Simulation metadata directly extracted from the publication text.",
-    )
     materials_and_methods: str | None = Field(
         None, description="Extracted Materials and Methods section text."
     )
     # ------------------------------------------------------------------
-    # Dataset & AI Model references
+    # External references
     # ------------------------------------------------------------------
+    external_links: list[str] = Field(
+        default_factory=list,
+        description="List of external references associated with the publication.",
+    )
     dataset_references: list[DatasetCoreMetadata] = Field(
         default_factory=list,
         description="Core references of datasets linked to this publication.",
