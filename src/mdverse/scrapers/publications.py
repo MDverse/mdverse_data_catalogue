@@ -22,7 +22,6 @@ from mdverse.models.dataset import DatasetCoreMetadata
 from mdverse.models.enums import DatasetSourceName, PublicationSourceName
 from mdverse.models.person import Person
 from mdverse.models.publication import PublicationMetadata
-from mdverse.scrapers.enrich_papers import enrich_paper_record
 from mdverse.scrapers.network import (
     create_httpx_client,
     is_connection_to_server_working,
@@ -438,16 +437,20 @@ def parse_hf_record(
     title = raw_item.get("title") or raw_item.get("paper", {}).get("title")
     if not paper_id or not title:
         return None
+    # Enrich with full paper details from Hugging Face API
+    paper_details = raw_item
     time.sleep(0.5)
     resp = safe_get(client, f"{HF_BASE_URL}/api/papers/{paper_id}")
-    if resp.status_code == 200:
+    if resp and resp.status_code == 200:
         try:
-            paper_details = resp.json()
+            details = resp.json()
+            # Merge raw_item and details, with details taking precedence
+            paper_details = raw_item | details
         except ValueError as err:
             logger.warning(f"[HF] Could not decode JSON details for {paper_id}: {err}.")
-            paper_details = raw_item
-        else:
-            paper_details = raw_item
+    else:
+        status = resp.status_code if resp else "No Response"
+        logger.warning(f"[HF] Failed to fetch details for {paper_id} (HTTP {status}).")
     arxiv_doi = f"10.48550/arxiv.{paper_id}".lower()
     pub_date = paper_details.get("publishedAt") or ""
     publication_year = str(pub_date)[:4]
@@ -770,12 +773,14 @@ def export_papers_to_parquet(
     output_path: Path,
     client: httpx.Client,
     logger: "loguru.Logger",
-) -> None:
-    """Enrich and export combined paper records to Parquet file."""
-    enriched_papers = [
-        enrich_paper_record(client, paper, logger) for paper in new_papers
-    ]
-    new_data = [paper.model_dump() for paper in enriched_papers]
+) -> pd.DataFrame:
+    """Enrich and export combined paper records to Parquet file.
+
+    Returns
+    -------
+        pd.DataFrame: Updated DataFrame with combined records.
+    """
+    new_data = [paper.model_dump() for paper in new_papers]
     new_df = pd.DataFrame(new_data)
 
     if not existing_df.empty:
@@ -783,10 +788,10 @@ def export_papers_to_parquet(
         combined_df = combined_df.drop_duplicates(subset=["doi"], keep="first")
     else:
         combined_df = new_df
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined_df.to_parquet(output_path, index=False)
     logger.success(f"Batch saved to {output_path.name}.")
+    return combined_df
 
 
 @click.command(
@@ -912,7 +917,7 @@ def main(
             )
     # Final batch save if any pending papers remain.
     if pending_batch:
-        export_papers_to_parquet(
+        _existing_df = export_papers_to_parquet(
             existing_df, pending_batch, output_path, client, logger
         )
     total_scraped = pmc_scraped_count + hf_scraped_count
