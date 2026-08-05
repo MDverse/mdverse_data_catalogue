@@ -10,7 +10,6 @@ from pathlib import Path
 
 import click
 import httpx
-import loguru
 import pandas as pd
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
@@ -27,29 +26,15 @@ from mdverse.scrapers.network import (
     is_connection_to_server_working,
 )
 
-# Endpoints.
-EUROPE_PMC_PING_URL = (
-    "https://www.ebi.ac.uk/europepmc/webservices/rest/search?"
-    "query=test&format=json&pageSize=1"
-)
-HF_PING_URL = "https://huggingface.co/api/papers/search?q=test&limit=1"
+EUROPE_PMC_PING_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=test&format=json&pageSize=1"
 EUROPE_PMC_SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-EUROPE_PMC_FULLTEXT_URL = (
-    "https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
-)
+HF_PING_URL = "https://huggingface.co/api/papers/search?q=test&limit=1"
 HF_BASE_URL = "https://huggingface.co"
-
-# Queries & Keywords.
+HF_PAPERS_SEARCH_QUERY = "molecular dynamics"
 EUROPE_PMC_SEARCH_QUERY = (
-    "("
-    'TITLE:("molecular dynamics" AND (simulation* OR trajector* OR dataset*))'
-    ") "
-    "AND OPEN_ACCESS:y "
-    "AND HAS_FT:y "
-    "NOT TITLE:review* "
-    'NOT PUB_TYPE:"Review" '
-    'NOT PUB_TYPE:"review-article" '
-    'NOT PUB_TYPE:"Systematic Review"'
+    '((TITLE:("molecular dynamics" AND (simulation* OR trajector* OR dataset*))) '
+    "AND OPEN_ACCESS:y AND HAS_FT:y NOT TITLE:review* "
+    'NOT PUB_TYPE:"Review" NOT PUB_TYPE:"review-article")'
 )
 METHODS_KEYWORDS = [
     "method",
@@ -74,49 +59,62 @@ REPOSITORY_URL_PATTERN = re.compile(
     r")",
     re.IGNORECASE,
 )
-HF_PAPERS_SEARCH_QUERY = "molecular dynamics"
+REPO_DOMAIN_MAP = {
+    "zenodo": DatasetSourceName.ZENODO,
+    "figshare": DatasetSourceName.FIGSHARE,
+    "10.6084": DatasetSourceName.FIGSHARE,
+    "osf.io": DatasetSourceName.OSF,
+    "huggingface.co": DatasetSourceName.HUGGINGFACE,
+}
 
 
 def load_existing_publications_from_parquet(
     parquet_path: Path,
 ) -> tuple[pd.DataFrame, set[str], dict[str, int]]:
-    """Load existing Parquet DataFrame, set of DOIs, and counts per source.
+    """Load existing dataset from a Parquet file to avoid duplicates.
 
     Returns
     -------
-        tuple[pd.DataFrame, set[str], dict[str, int]]:
-            DataFrame, existing DOIs, and counts per publication source.
+        tuple[pd.DataFrame, set[str], dict[str, int]]: DataFrame, DOIs, and counts.
     """
     if parquet_path.exists():
+        # Load the dataframe and convert DOIs to lowercase for consistent comparison.
         dataframe = pd.read_parquet(parquet_path)
-        existing_dois = set(dataframe["doi"].dropna().str.lower())
-
+        dois = set(dataframe["doi"].dropna().str.lower())
         counts = {}
+        # Calculate the distribution of existing publications across known sources.
         if "publication_source_name" in dataframe.columns:
             source_counts = dataframe["publication_source_name"].value_counts()
-            for source_enum in PublicationSourceName:
-                counts[source_enum.value] = int(source_counts.get(source_enum.value, 0))
-        return dataframe, existing_dois, counts
-    return pd.DataFrame(), set(), {source.value: 0 for source in PublicationSourceName}
+            counts = {
+                enum_value.value: int(source_counts.get(enum_value.value, 0))
+                for enum_value in PublicationSourceName
+            }
+        return dataframe, dois, counts
+    # Return empty structures when no previous parquet file is found.
+    return (
+        pd.DataFrame(),
+        set(),
+        {enum_value.value: 0 for enum_value in PublicationSourceName},
+    )
 
 
 def safe_get(
-    client: httpx.Client,
-    url: str,
-    params: dict | None = None,
-    max_retries: int = 3,
+    client: httpx.Client, url: str, params: dict | None = None, max_retries: int = 3
 ) -> httpx.Response:
-    """Execute GET request with exponential backoff on HTTP 429 status code.
+    """Execute an HTTP GET request with exponential backoff for rate limits.
 
     Returns
     -------
         httpx.Response: The HTTP response object.
     """
     for attempt in range(max_retries):
+        # Fire the HTTP request with the provided parameters.
         response = client.get(url, params=params)
+        # Handle API rate limiting
         if response.status_code == 429:
-            # Respect Retry-After header if provided, otherwise exponential backoff
             retry_after = response.headers.get("Retry-After")
+            # Calculate wait time using exponential backoff
+            # or the Retry-After header if provided.
             wait_time = (
                 int(retry_after)
                 if retry_after and retry_after.isdigit()
@@ -129,380 +127,263 @@ def safe_get(
 
 
 def _extract_header_info(line: str, next_line: str | None) -> tuple[str | None, int]:
-    """Extract section header title and its Markdown depth level.
+    """Extract header title and markdown depth level from a text line.
 
     Returns
     -------
         tuple[str | None, int]: Lowercase header title and depth level (1-6).
     """
     stripped = line.strip()
-    # Inline ATX headers (e.g. text.### Title)
+    # Normalize inline ATX headers by isolating the hash symbols.
     if "#" in stripped and not stripped.startswith("#"):
-        hash_index = stripped.find("#")
-        potential_header = stripped[hash_index:]
-        if re.match(r"^#{1,6}\s+", potential_header):
-            stripped = potential_header
-    # Standard ATX headers (# Title, ## 4. Methods)
-    if re.match(r"^#{1,6}\s+", stripped):
-        header_text = stripped.lstrip("#").strip().lower()
-        level = len(stripped) - len(stripped.lstrip("#"))
-        return header_text, level
-    # Bold header style (e.g. **Methods** or **4 Methods**)
+        stripped = stripped[stripped.find("#") :]
+    # Match standard Markdown headers and calculate their depth level.
+    match = re.match(r"^#{1,6}\s+", stripped)
+    if match:
+        return stripped.lstrip("#").strip().lower(), len(match.group().strip())
+    # Identify bold text patterns often used as fallback sub-headers.
     if re.match(r"^\*\*\d*(\.\d+)*\s*.*?\*\*", stripped):
-        header_text = stripped.strip("*").strip().lower()
-        return header_text, 2
-    # Setext headers (Title followed by --- or === on next line)
+        return stripped.strip("*").strip().lower(), 2
+    # Detect Setext headers characterized by underlining on the following line.
     if next_line:
-        next_stripped = next_line.strip()
-        if next_stripped and set(next_stripped) == {"="}:
-            return stripped.lower(), 1
-        if next_stripped and set(next_stripped) == {"-"}:
-            return stripped.lower(), 2
+        next_string = next_line.strip()
+        if next_string and set(next_string) in ({"="}, {"-"}):
+            return stripped.lower(), 1 if "=" in next_string else 2
     return None, 0
 
 
 def _extract_methods_fallback(lines: list[str]) -> str | None:
-    """Fallback extractor using regex when structured headers are missing.
+    """Extract methods content using keyword matching as a fallback.
 
     Returns
     -------
         str | None: Extracted Methods content or None.
     """
-    methods_lines = []
-    is_in_section = False
+    methods_lines, is_in_section = [], False
     for line in lines:
         stripped = line.strip()
         lower_line = stripped.lower()
-        # Check if line looks like a un-markdowned header for methods
-        is_methods_start = (
-            any(keyword in lower_line for keyword in METHODS_KEYWORDS)
+        # Toggle section state if a line strongly matches methodology keywords.
+        if (
+            not is_in_section
+            and any(keyword in lower_line for keyword in METHODS_KEYWORDS)
             and len(stripped) < 60
-        )
-        if is_methods_start and not is_in_section:
+        ):
             is_in_section = True
-            methods_lines.append(line)
-            continue
+        # Break the extraction loop when encountering distinct paper sections.
+        elif (
+            is_in_section
+            and any(
+                lower_line.startswith(stop_word)
+                for stop_word in ["results", "discussion", "references"]
+            )
+            and len(stripped) < 40
+        ):
+            break
+        # Append lines to the results once inside the recognized section.
         if is_in_section:
-            # Stop if encountering obvious next major sections
-            if (
-                any(
-                    lower_line.startswith(stop_kw)
-                    for stop_kw in ["results", "discussion", "references", "ackno"]
-                )
-                and len(stripped) < 40
-            ):
-                break
             methods_lines.append(line)
-    text = "\n".join(methods_lines).strip()
-    return text or None
+    return "\n".join(methods_lines).strip() or None
 
 
 def _extract_methods_structured(lines: list[str]) -> str | None:
-    """Extract methods section based on structured Markdown headers.
+    """Extract methods content strictly based on Markdown headers.
 
     Returns
     -------
         str | None: Extracted Methods text or None if not found.
     """
-    methods_lines = []
-    is_in_section, skip_next_line = False, False
-    section_level = 0
+    methods_lines, in_section, skip_next, section_level = [], False, False, 0
     for index, line in enumerate(lines):
-        if skip_next_line:
-            skip_next_line = False
+        # Skip the iteration if the line was already processed as a Setext underline.
+        if skip_next:
+            skip_next = False
             continue
         next_line = lines[index + 1] if index + 1 < len(lines) else None
         header, level = _extract_header_info(line, next_line)
         if header:
             clean_header = re.sub(r"^\d+(\.\d+)*\.?\s*", "", header).strip()
+            # Capture the methods section when the header explicitly matches.
             if any(keyword in clean_header for keyword in METHODS_KEYWORDS):
-                is_in_section = True
-                section_level = level
+                in_section, section_level = True, level
                 methods_lines.append(line)
-                if next_line and (
-                    set(next_line.strip()) == {"-"} or set(next_line.strip()) == {"="}
-                ):
+                if next_line and set(next_line.strip()) in ({"-"}, {"="}):
                     methods_lines.append(next_line)
-                    skip_next_line = True
+                    skip_next = True
                 continue
-            if is_in_section and level <= section_level:
+            # Terminate extraction if an equivalent/higher-level header is encountered.
+            if in_section and level <= section_level:
                 break
-        if is_in_section:
+        if in_section:
             methods_lines.append(line)
-
-    text = "\n".join(methods_lines).strip()
-    return text or None
+    return "\n".join(methods_lines).strip() or None
 
 
 def extract_materials_and_methods_hf(
-    client: httpx.Client, paper_id: str, logger: "loguru.Logger"
+    client: httpx.Client, paper_id: str, logger: object
 ) -> str | None:
-    """Fetch full-text Markdown for Hugging Face paper and extract Methods.
+    """Fetch and extract the methodology section for a Hugging Face paper.
 
     Returns
     -------
         str | None: Extracted Methods section text or None.
     """
     url = f"https://huggingface.co/papers/{paper_id}.md"
+    # Attempt to retrieve the raw Markdown representation of the paper.
     try:
         response = safe_get(client, url)
         if response.status_code != 200:
-            if response.status_code == 404:
-                logger.warning(
-                    f"[HF] No Markdown full-text found for paper {paper_id} (HTTP 404)."
-                )
-                return None
             logger.error(
-                f"[HF] Could not fetch Markdown full-text for paper "
-                f"{paper_id} (HTTP {response.status_code})."
+                f"[HF] Markdown fetch failed for {paper_id} ({response.status_code})."
             )
             return None
-    except httpx.HTTPError as err:
-        logger.error(f"[HF] Methods extraction failed for {paper_id}: {err}.")
+    except httpx.HTTPError as error:
+        logger.error(f"[HF] Extraction failed for {paper_id}: {error}.")
         return None
-    else:
-        lines = response.text.splitlines()
-        extracted_text = _extract_methods_structured(lines)
-        if not extracted_text:
-            extracted_text = _extract_methods_fallback(lines)
-
-        if not extracted_text:
-            logger.warning(
-                f"[HF] No 'Materials and Methods' section found in "
-                f"Markdown for paper {paper_id}."
-            )
-            return None
-        return extracted_text
+    # Process the text using the structured approach first, then the regex fallback.
+    lines = response.text.splitlines()
+    text = _extract_methods_structured(lines) or _extract_methods_fallback(lines)
+    if not text:
+        logger.warning(f"[HF] No Methods section found in {paper_id}.")
+    return text
 
 
 def search_hf_papers(
-    client: httpx.Client, limit: int | None, logger: "loguru.Logger"
+    client: httpx.Client, limit: int | None, logger: object
 ) -> list[dict]:
-    """Search Hugging Face papers via search API.
+    """Search the Hugging Face papers API using predefined keywords.
 
     Returns
     -------
         list[dict]: List of paper records.
     """
-    url = f"{HF_BASE_URL}/api/papers/search"
-    params = {"q": HF_PAPERS_SEARCH_QUERY, "limit": limit or 120}
-    response = safe_get(client, url, params=params)
+    # Forward the query to the dedicated Hugging Face endpoint and collect results.
+    response = safe_get(
+        client,
+        f"{HF_BASE_URL}/api/papers/search",
+        params={"q": HF_PAPERS_SEARCH_QUERY, "limit": limit or 120},
+    )
     if response.status_code != 200:
         logger.error(f"[HF] Search failed with HTTP {response.status_code}.")
         return []
     return response.json()
 
 
-def fetch_hf_linked_datasets(
-    client: httpx.Client, paper_id: str
-) -> list[DatasetCoreMetadata]:
-    """Fetch datasets linked to an arXiv ID on Hugging Face.
+def parse_authors(authors_data: list[dict]) -> list[Person]:
+    """Parse raw author dictionaries into structured Person instances.
 
     Returns
     -------
-        list[DatasetCoreMetadata]: List of dataset references.
+        list[Person]: Validated Person models.
     """
-    response = client.get(
-        f"{HF_BASE_URL}/api/datasets", params={"filter": f"arxiv:{paper_id}"}
-    )
-    if response.status_code != 200:
-        return []
+    persons = []
+    # Split the full name strings to guess first and last names for each author.
+    for author in authors_data:
+        full_name = author.get("name")
+        if full_name:
+            parts = full_name.strip().split()
+            persons.append(
+                Person(
+                    first_name=parts[0] if parts else None,
+                    last_name=" ".join(parts[1:]) if len(parts) > 1 else None,
+                    full_name=full_name,
+                )
+            )
+    return persons
 
-    dataset_refs = []
-    for item in response.json():
-        dataset_id = item.get("id") or item.get("_id")
+
+def parse_hf_record(
+    client: httpx.Client, raw_item: dict, logger: object
+) -> PublicationMetadata | None:
+    """Parse a raw Hugging Face paper record into a publication model.
+
+    Returns
+    -------
+        PublicationMetadata | None: Validated paper model or None.
+    """
+    # Verify the existence of fundamental metadata fields before further processing.
+    paper_id = raw_item.get("id") or raw_item.get("paper", {}).get("id")
+    title = raw_item.get("title") or raw_item.get("paper", {}).get("title")
+    if not paper_id or not title:
+        return None
+    # Enrich the base item with detailed information from the dedicated paper API.
+    time.sleep(0.5)
+    response = safe_get(client, f"{HF_BASE_URL}/api/papers/{paper_id}")
+    paper_details = (
+        raw_item | response.json()
+        if response and response.status_code == 200
+        else raw_item
+    )
+    linked_datasets, linked_models = [], []
+    # Convert linked Hugging Face datasets into DatasetCoreMetadata.
+    for item in paper_details.get("linkedDatasets", []):
+        dataset_id = item.get("id")
         if dataset_id:
             with contextlib.suppress(ValidationError):
-                dataset_refs.append(
+                linked_datasets.append(
                     DatasetCoreMetadata(
                         dataset_repository_name=DatasetSourceName.HUGGINGFACE,
                         dataset_id_in_repository=str(dataset_id),
-                        dataset_url_in_repository=(
-                            f"https://huggingface.co/datasets/{dataset_id}"
-                        ),
+                        dataset_url_in_repository=f"https://huggingface.co/datasets/{dataset_id}",
                     )
                 )
-    return dataset_refs
-
-
-def fetch_hf_linked_models(
-    client: httpx.Client, paper_id: str
-) -> list[AiModelCoreMetadata]:
-    """Fetch AI models linked to an arXiv ID on Hugging Face.
-
-    Returns
-    -------
-        list[AiModelCoreMetadata]: List of model references.
-    """
-    response = client.get(
-        f"{HF_BASE_URL}/api/models", params={"filter": f"arxiv:{paper_id}"}
-    )
-    if response.status_code != 200:
-        return []
-
-    model_refs = []
-    for item in response.json():
-        model_id = item.get("id") or item.get("_id")
+    # Convert linked Hugging Face AI models into AiModelCoreMetadata.
+    for item in paper_details.get("linkedModels", []):
+        model_id = item.get("id")
         if model_id:
             with contextlib.suppress(ValidationError):
-                model_refs.append(
+                linked_models.append(
                     AiModelCoreMetadata(
                         repository_name=DatasetSourceName.HUGGINGFACE,
                         model_id_in_repository=str(model_id),
                         model_url=f"https://huggingface.co/{model_id}",
                     )
                 )
-    return model_refs
-
-
-def parse_authors(authors_data: list[dict]) -> list[Person]:
-    """Extract author names.
-
-    Returns
-    -------
-        list[Person]: List of validated Person models.
-    """
-    persons = []
-    for author in authors_data:
-        full_name = author.get("name")
-        if not full_name:
-            continue
-        name_parts = full_name.strip().split()
-        first_name = name_parts[0] if name_parts else None
-        last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else None
-        persons.append(
-            Person(
-                first_name=first_name,
-                last_name=last_name,
-                full_name=full_name,
-            )
-        )
-    return persons
-
-
-def parse_hf_datasets(linked_datasets: list[dict]) -> list[DatasetCoreMetadata]:
-    """Build DatasetCoreMetadata instances from Hugging Face linked datasets.
-
-    Returns
-    -------
-        list[DatasetCoreMetadata]: List of validated dataset metadata.
-    """
-    datasets = []
-    for item in linked_datasets:
-        dataset_id = item.get("id")
-        if not dataset_id:
-            continue
-        datasets.append(
-            DatasetCoreMetadata(
-                dataset_repository_name=DatasetSourceName.HUGGINGFACE,
-                dataset_id_in_repository=str(dataset_id),
-                dataset_url_in_repository=f"https://huggingface.co/datasets/{dataset_id}",
-            )
-        )
-    return datasets
-
-
-def parse_hf_models(linked_models: list[dict]) -> list[AiModelCoreMetadata]:
-    """Build AiModelCoreMetadata instances from Hugging Face linked models.
-
-    Returns
-    -------
-        list[AiModelCoreMetadata]: List of validated AI model metadata.
-    """
-    models = []
-    for item in linked_models:
-        model_id = item.get("id")
-        if not model_id:
-            continue
-        models.append(
-            AiModelCoreMetadata(
-                repository_name=DatasetSourceName.HUGGINGFACE,
-                model_id_in_repository=str(model_id),
-                model_url=f"https://huggingface.co/{model_id}",
-            )
-        )
-    return models
-
-
-def parse_hf_record(
-    client: httpx.Client, raw_item: dict, logger: "loguru.Logger"
-) -> PublicationMetadata | None:
-    """Parse raw Hugging Face paper JSON into PublicationMetadata.
-
-    Returns
-    -------
-        PublicationMetadata | None: Validated paper model or None.
-    """
-    paper_id = raw_item.get("id") or raw_item.get("paper", {}).get("id")
-    title = raw_item.get("title") or raw_item.get("paper", {}).get("title")
-    if not paper_id or not title:
-        return None
-    # Enrich with full paper details from Hugging Face API
-    paper_details = raw_item
-    time.sleep(0.5)
-    resp = safe_get(client, f"{HF_BASE_URL}/api/papers/{paper_id}")
-    if resp and resp.status_code == 200:
-        try:
-            details = resp.json()
-            # Merge raw_item and details, with details taking precedence
-            paper_details = raw_item | details
-        except ValueError as err:
-            logger.warning(f"[HF] Could not decode JSON details for {paper_id}: {err}.")
-    else:
-        status = resp.status_code if resp else "No Response"
-        logger.warning(f"[HF] Failed to fetch details for {paper_id} (HTTP {status}).")
-    arxiv_doi = f"10.48550/arxiv.{paper_id}".lower()
-    pub_date = paper_details.get("publishedAt") or ""
-    publication_year = str(pub_date)[:4]
-    linked_datasets = parse_hf_datasets(paper_details.get("linkedDatasets", []))
-    linked_models = parse_hf_models(paper_details.get("linkedModels", []))
-    methods_text = extract_materials_and_methods_hf(client, str(paper_id), logger)
+    # Assemble the final Pydantic publication object.
     try:
         return PublicationMetadata(
-            doi=arxiv_doi,
+            doi=f"10.48550/arxiv.{paper_id}".lower(),
             publication_source_name=PublicationSourceName.HUGGINGFACE,
             publication_id_in_source=str(paper_id),
             url=f"https://huggingface.co/papers/{paper_id}",
             title=title,
-            year=publication_year,
+            year=str(paper_details.get("publishedAt", ""))[:4],
             keywords=paper_details.get("ai_keywords", []),
             authors=parse_authors(paper_details.get("authors", [])),
             abstract=paper_details.get("summary"),
             journal="Hugging Face Daily Papers",
-            materials_and_methods=methods_text,
+            materials_and_methods=extract_materials_and_methods_hf(
+                client, str(paper_id), logger
+            ),
             dataset_references=linked_datasets,
             model_references=linked_models,
         )
-    except ValidationError as err:
-        logger.error(f"[HF] Schema error ({paper_id}): {err}.")
+    except ValidationError as error:
+        logger.error(f"[HF] Schema error ({paper_id}): {error}.")
         return None
 
 
 def search_europe_pmc_stream(
-    client: httpx.Client,
-    max_results: int | None,
+    client: httpx.Client, max_results: int | None
 ) -> Generator[list[dict]]:
-    """Yield pages of open-access MD papers from Europe PMC.
+    """Stream search results continuously via Europe PMC cursor pagination.
 
     Yields
     ------
-        list[dict]: Page chunk of raw paper metadata records.
+        list[dict]: Page chunk of metadata records.
     """
-    cursor_mark = "*"
-    page_size = 50
-    total_yielded = 0
+    cursor, total = "*", 0
+    # Execute paginated requests continuously until the cursor signifies the last page.
     while True:
-        params = {
-            "query": EUROPE_PMC_SEARCH_QUERY,
-            "format": "json",
-            "pageSize": page_size,
-            "resultType": "core",
-            "cursorMark": cursor_mark,
-        }
-        # Make the GET request to Europe PMC API
         response = client.get(
             EUROPE_PMC_SEARCH_URL,
-            params=params,
+            params={
+                "query": EUROPE_PMC_SEARCH_QUERY,
+                "format": "json",
+                "pageSize": 50,
+                "resultType": "core",
+                "cursorMark": cursor,
+            },
             timeout=30.0,
         )
         response.raise_for_status()
@@ -510,129 +391,95 @@ def search_europe_pmc_stream(
         results = data.get("resultList", {}).get("result", [])
         if not results:
             break
-        # Yield the current page of results
         yield results
-        # Update the total number of results yielded
-        total_yielded += len(results)
-        # Check if we have reached the maximum number of results
-        # or if there are no more pages
+        # Update counters and evaluate the breaking condition for maximum limits.
+        total += len(results)
         next_cursor = data.get("nextCursorMark")
-        if (max_results and total_yielded >= max_results) or (
-            next_cursor == cursor_mark
-        ):
+        if (max_results and total >= max_results) or (next_cursor == cursor):
             break
-        cursor_mark = next_cursor
-
-
-def _extract_authors_pmc(raw_item: dict) -> list[Person]:
-    """Extract author metadata from Europe PMC raw item.
-
-    Returns
-    -------
-        list[Person]: List of validated Person models.
-    """
-    authors_data = raw_item.get("authorList", {}).get("author", []) or []
-    return [
-        Person(
-            first_name=auth.get("firstName"),
-            last_name=auth.get("lastName"),
-            full_name=auth.get("fullName"),
-            # Use next() to extract the first element
-            # without raising StopIteration if not found.
-            orcid=next(
-                (
-                    aid.get("value")
-                    for aid in [auth.get("authorId") or {}]
-                    if aid.get("type") == "ORCID"
-                ),
-                None,
-            ),
-            affiliation=next(
-                (
-                    aff.get("affiliation")
-                    for aff in auth.get("authorAffiliationDetailsList", {}).get(
-                        "authorAffiliation", []
-                    )
-                    or []
-                ),
-                None,
-            ),
-        )
-        for auth in authors_data
-    ]
-
-
-def _extract_repository_links(*texts: str | None) -> list[str]:
-    """Extract repository links from given texts using regex pattern.
-
-    Returns
-    -------
-        list[str]: List of unique repository URLs found in the texts.
-    """
-    found_links = set()
-    for text in texts:
-        if not text:
-            continue
-        matches = REPOSITORY_URL_PATTERN.findall(text)
-        for match in matches:
-            clean_url = match.rstrip(".,;()[]")
-            found_links.add(clean_url)
-
-    return list(found_links)
+        cursor = next_cursor
 
 
 def _extract_methods_and_links_pmc(
-    client: httpx.Client, pmcid: str, logger: "loguru.Logger"
+    client: httpx.Client, pmcid: str, logger: object
 ) -> tuple[str | None, list[str]]:
-    """Fetch XML full-text, extract Methods text and repository links.
+    """Retrieve XML full text to extract specific methods tags and links.
 
     Returns
     -------
-        tuple[str | None, list[str]]:
-            - Extracted Materials and Methods section text (or None).
-            - List of unique repository URLs found in the entire XML text.
+        tuple[str | None, list[str]]: Methods text and external links.
     """
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
+    # Initiate connection to download the full XML document.
     try:
-        # Fetch the full-text XML for the given PMCID
-        url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
-        res = client.get(url, timeout=30.0)
-        if res.status_code != 200:
+        response = client.get(url, timeout=30.0)
+        if response.status_code != 200:
             logger.error(
-                f"[PMC] Could not fetch XML full-text for {pmcid} "
-                f"(HTTP {res.status_code})."
+                f"[PMC] Fetch XML failed for {pmcid} ({response.status_code})."
             )
             return None, []
-    except httpx.HTTPError as err:
-        logger.error(f"[PMC] Failed fetching XML full-text for {pmcid}: {err}.")
+    except httpx.HTTPError as error:
+        logger.error(f"[PMC] XML request failed for {pmcid}: {error}.")
         return None, []
-    else:
-        # Parse XML raw bytes using lxml XML parser
-        soup = BeautifulSoup(res.content, "xml")
-        # 1. Extract repository URLs (GitHub, Zenodo, Figshare, etc.)
-        full_text = soup.get_text()
-        extracted_links = _extract_repository_links(full_text)
-        # 2. Extract Methods sections matching defined keywords
-        kw_pattern = re.compile("|".join(METHODS_KEYWORDS), re.IGNORECASE)
-        methods = [
-            "\n".join(p.get_text(strip=True) for p in sec.find_all("p"))
-            for sec in soup.find_all("sec")
-            if kw_pattern.search(f"{sec.get('sec-type', '')} {sec.find('title')}")
-        ]
-        # Join the extracted methods sections into a single string
-        methods_text = "\n\n".join(filter(None, methods)).strip() or None
-        if not methods_text:
-            logger.warning(
-                f"[PMC] No 'Materials and Methods' section found in XML "
-                f"for paper {pmcid}."
-            )
+    # Identify unique URLs matching defined repository formats within the raw text.
+    soup = BeautifulSoup(response.content, "xml")
+    found_links = list(
+        {
+            match.rstrip(".,;()[]")
+            for match in REPOSITORY_URL_PATTERN.findall(soup.get_text())
+        }
+    )
+    # Isolate paragraph texts contained strictly within valid methodology section tags.
+    kw_pattern = re.compile("|".join(METHODS_KEYWORDS), re.IGNORECASE)
+    methods = [
+        "\n".join(paragraph.get_text(strip=True) for paragraph in section.find_all("p"))
+        for section in soup.find_all("sec")
+        if kw_pattern.search(f"{section.get('sec-type', '')} {section.find('title')}")
+    ]
+    methods_text = "\n\n".join(filter(None, methods)).strip() or None
+    if not methods_text:
+        logger.warning(f"[PMC] No Methods section found in {pmcid}.")
+    return methods_text, found_links
 
-        return methods_text, extracted_links
+
+def _categorize_links(links: list[str]) -> tuple[list[DatasetCoreMetadata], list[str]]:
+    """Separate explicit data repositories from standard external links.
+
+    Returns
+    -------
+        tuple[list[DatasetCoreMetadata], list[str]]: Datasets and external links.
+    """
+    dataset_refs, ext_links = [], []
+    for link in links:
+        lower_link = link.lower()
+        # Check if the extracted link belongs to any explicitly tracked database enum.
+        matching_source = next(
+            (
+                enum_val
+                for domain_string, enum_val in REPO_DOMAIN_MAP.items()
+                if domain_string in lower_link
+            ),
+            None,
+        )
+        if matching_source:
+            with contextlib.suppress(ValidationError):
+                dataset_refs.append(
+                    DatasetCoreMetadata(
+                        dataset_repository_name=matching_source,
+                        dataset_id_in_repository=link.rstrip("/").split("/")[-1],
+                        dataset_url_in_repository=link,
+                    )
+                )
+        # Keep non-recognized URLs as standard external references.
+        else:
+            ext_links.append(link)
+    return dataset_refs, ext_links
 
 
 def parse_pmc_record(
-    client: httpx.Client, raw_item: dict, logger: "loguru.Logger"
+    client: httpx.Client, raw_item: dict, logger: object
 ) -> PublicationMetadata | None:
-    """Parse raw Europe PMC JSON into PublicationMetadata.
+    """Parse a raw Europe PMC record into a publication model.
 
     Returns
     -------
@@ -640,17 +487,44 @@ def parse_pmc_record(
     """
     doi_val = raw_item.get("doi")
     title_val = raw_item.get("title")
-    pub_year = str(raw_item.get("pubYear", ""))
     pmcid = raw_item.get("pmcid")
-    if not doi_val or not title_val or not pub_year or not pmcid:
+    # Abort parsing if any mandatory bibliographic identifier is missing.
+    if not doi_val or not title_val or not pmcid:
         return None
     clean_doi = str(doi_val).strip().lower()
-    journal_info = raw_item.get("journalInfo", {}).get("journal", {})
-    keywords = raw_item.get("keywordList", {}).get("keyword", [])
-    abstract_text = raw_item.get("abstractText")
-    methods_text, external_links = _extract_methods_and_links_pmc(
-        client, str(pmcid), logger
-    )
+    # Trigger XML evaluation to split methodology sections and links.
+    methods_text, all_links = _extract_methods_and_links_pmc(client, str(pmcid), logger)
+    # Separate recognized datasets and generic external references.
+    dataset_refs, ext_links = _categorize_links(all_links)
+    # Parse author metadata.
+    authors_data = raw_item.get("authorList", {}).get("author", []) or []
+    parsed_authors = [
+        Person(
+            first_name=author.get("firstName"),
+            last_name=author.get("lastName"),
+            full_name=author.get("fullName"),
+            orcid=next(
+                (
+                    auth_id.get("value")
+                    for auth_id in [author.get("authorId") or {}]
+                    if auth_id.get("type") == "ORCID"
+                ),
+                None,
+            ),
+            affiliation=next(
+                (
+                    auth_aff.get("affiliation")
+                    for auth_aff in author.get("authorAffiliationDetailsList", {}).get(
+                        "authorAffiliation", []
+                    )
+                    or []
+                ),
+                None,
+            ),
+        )
+        for author in authors_data
+    ]
+    # Instantiate the Pydantic PublicationMetadata model.
     try:
         return PublicationMetadata(
             doi=clean_doi,
@@ -658,17 +532,46 @@ def parse_pmc_record(
             publication_id_in_source=str(pmcid),
             url=f"https://doi.org/{clean_doi}",
             title=title_val,
-            authors=_extract_authors_pmc(raw_item),
-            year=pub_year,
-            abstract=abstract_text,
-            journal=journal_info.get("title"),
-            keywords=keywords,
+            authors=parsed_authors,
+            year=str(raw_item.get("pubYear", "")),
+            abstract=raw_item.get("abstractText"),
+            journal=raw_item.get("journalInfo", {}).get("journal", {}).get("title"),
+            keywords=raw_item.get("keywordList", {}).get("keyword", []),
             materials_and_methods=methods_text,
-            external_links=external_links,
+            external_links=ext_links,
+            dataset_references=dataset_refs,
         )
-    except ValidationError as err:
-        logger.error(f"[PMC] Schema error ({clean_doi}): {err}.")
+    except ValidationError as error:
+        logger.error(f"[PMC] Schema error ({clean_doi}): {error}.")
         return None
+
+
+def export_papers_to_parquet(
+    dataframe: pd.DataFrame,
+    new_papers: list[PublicationMetadata],
+    filepath: Path,
+    logger: object,
+) -> pd.DataFrame:
+    """Export combined scraped publication records to a Parquet file.
+
+    Returns
+    -------
+        pd.DataFrame: Updated DataFrame with combined records.
+    """
+    # Transform Python models to a dataframe and merge them.
+    new_df = pd.DataFrame([paper.model_dump() for paper in new_papers])
+    combined = (
+        pd.concat([dataframe, new_df], ignore_index=True).drop_duplicates(
+            subset=["doi"], keep="first"
+        )
+        if not dataframe.empty
+        else new_df
+    )
+    # Save to parquet, ensuring the directory exists.
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_parquet(filepath, index=False)
+    logger.success(f"Batch saved to {filepath.name}.")
+    return combined
 
 
 def scrape_europe_pmc_source(
@@ -679,27 +582,26 @@ def scrape_europe_pmc_source(
     nb_test: int | None,
     batch_size: int,
     pending_batch: list[PublicationMetadata],
-    logger: "loguru.Logger",
+    logger: object,
 ) -> tuple[pd.DataFrame, list[PublicationMetadata], int]:
-    """Scrape papers from Europe PMC.
+    """Iterate over Europe PMC stream pages and save papers in batches.
 
     Returns
     -------
     tuple[pd.DataFrame, list[PublicationMetadata], int]:
-        Updated DataFrame, pending batch, and count of scraped papers.
+        Updated dataframe, pending batch, scraped count.
     """
-    logger.info("=== Scraping Europe PMC ===")
     pmc_count = 0
+    # Walk through the endless results generator and parse items individually.
     for page_results in search_europe_pmc_stream(client, max_results=None):
         for raw_item in page_results:
             if nb_test and pmc_count >= nb_test:
-                break
-
+                return existing_df, pending_batch, pmc_count
             doi_val = raw_item.get("doi")
             if not doi_val or str(doi_val).strip().lower() in existing_dois:
                 continue
-
             paper = parse_pmc_record(client, raw_item, logger)
+            # Register validated papers into the pending queue for delayed saving.
             if paper:
                 pmc_count += 1
                 existing_dois.add(paper.doi)
@@ -707,13 +609,9 @@ def scrape_europe_pmc_source(
                 logger.info(f"[PMC] Scraped #{pmc_count} ({paper.doi})")
                 if len(pending_batch) >= batch_size:
                     existing_df = export_papers_to_parquet(
-                        existing_df, pending_batch, output_path, client, logger
+                        existing_df, pending_batch, output_path, logger
                     )
                     pending_batch = []
-
-        if nb_test and pmc_count >= nb_test:
-            break
-
     return existing_df, pending_batch, pmc_count
 
 
@@ -725,73 +623,85 @@ def scrape_huggingface_source(
     nb_test: int | None,
     batch_size: int,
     pending_batch: list[PublicationMetadata],
-    logger: "loguru.Logger",
+    logger: object,
 ) -> tuple[pd.DataFrame, list[PublicationMetadata], int]:
-    """Scrape papers from Hugging Face Papers.
+    """Fetch results from Hugging Face and process them incrementally.
 
     Returns
     -------
     tuple[pd.DataFrame, list[PublicationMetadata], int]:
-        Updated DataFrame, pending batch, and count of scraped papers.
+        Updated dataframe, pending batch, scraped count.
     """
-    logger.info("=== Scraping Hugging Face Papers ===")
     hf_count = 0
-    hf_results = search_hf_papers(client, limit=nb_test, logger=logger)
-    for raw_item in hf_results:
+    # Interrogate Hugging Face for matching publications and filter duplicates.
+    for raw_item in search_hf_papers(client, limit=nb_test, logger=logger):
         if nb_test and hf_count >= nb_test:
             break
-
         paper_id = raw_item.get("id") or raw_item.get("paper", {}).get("id")
         if not paper_id:
             continue
-
         arxiv_doi = f"10.48550/arxiv.{paper_id}".lower()
         if arxiv_doi in existing_dois:
             continue
-
         paper = parse_hf_record(client, raw_item, logger)
+        # Offload processed models in groups dictated by the batch size threshold.
         if paper:
             hf_count += 1
             existing_dois.add(paper.doi)
             pending_batch.append(paper)
-            logger.info(
-                f"[HF] Scraped #{hf_count} ({paper.doi}) | "
-                f"Datasets: {len(paper.dataset_references)} | "
-                f"Models: {len(paper.model_references)}"
-            )
+            logger.info(f"[HF] Scraped #{hf_count} ({paper.doi})")
             if len(pending_batch) >= batch_size:
                 existing_df = export_papers_to_parquet(
-                    existing_df, pending_batch, output_path, client, logger
+                    existing_df, pending_batch, output_path, logger
                 )
                 pending_batch = []
     return existing_df, pending_batch, hf_count
 
 
-def export_papers_to_parquet(
-    existing_df: pd.DataFrame,
-    new_papers: list[PublicationMetadata],
-    output_path: Path,
+def _run_scraper_source(
+    name: str,
+    ping_url: str,
+    scraper_func,
     client: httpx.Client,
-    logger: "loguru.Logger",
-) -> pd.DataFrame:
-    """Enrich and export combined paper records to Parquet file.
+    existing_df: pd.DataFrame,
+    existing_dois: set[str],
+    existing_counts: dict[str, int],
+    output_path: Path,
+    nb_test: int | None,
+    batch_size: int,
+    pending_batch: list[PublicationMetadata],
+    logger: object,
+) -> tuple[pd.DataFrame, list[PublicationMetadata], int]:
+    """Evaluate server connection and dispatch the requested scraper function.
 
     Returns
     -------
-        pd.DataFrame: Updated DataFrame with combined records.
+    tuple[pd.DataFrame, list[PublicationMetadata], int]:
+        Updated dataframe, pending batch, scraped count.
     """
-    new_data = [paper.model_dump() for paper in new_papers]
-    new_df = pd.DataFrame(new_data)
-
-    if not existing_df.empty:
-        combined_df = pd.concat([existing_df, new_df], ignore_index=True)
-        combined_df = combined_df.drop_duplicates(subset=["doi"], keep="first")
+    scraped_count = 0
+    logger.info(f"=== Scraping {name} ===")
+    # Secure server connection validation prior to initiating heavy routines.
+    if is_connection_to_server_working(client, ping_url, logger=logger):
+        logger.success(f"Connection to {name} API successful!")
+        existing_df, pending_batch, scraped_count = scraper_func(
+            client,
+            existing_df,
+            existing_dois,
+            output_path,
+            nb_test,
+            batch_size,
+            pending_batch,
+            logger,
+        )
     else:
-        combined_df = new_df
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    combined_df.to_parquet(output_path, index=False)
-    logger.success(f"Batch saved to {output_path.name}.")
-    return combined_df
+        logger.warning(f"Connection failed. Skipping {name} source.")
+    if scraped_count == 0:
+        logger.warning(
+            f"[{name}] No new papers scraped. All fetched are already in "
+            f"{output_path.name} ({existing_counts.get(name, 0)} existing)."
+        )
+    return existing_df, pending_batch, scraped_count
 
 
 @click.command(
@@ -863,64 +773,45 @@ def main(
         client.headers["Authorization"] = f"Bearer {hf_token}"
     # Execute Source: Hugging Face Papers.
     pending_batch = []
-    hf_scraped_count = 0
-    pmc_scraped_count = 0
+    total_scraped = 0
     if use_hf:
-        # Check connection to source servers before proceeding.
-        if is_connection_to_server_working(client, HF_PING_URL, logger=logger):
-            logger.success("Connection to Hugging Face API successful!")
-            existing_df, pending_batch, hf_scraped_count = scrape_huggingface_source(
-                client=client,
-                existing_df=existing_df,
-                existing_dois=existing_dois,
-                output_path=output_path,
-                nb_test=nb_test,
-                batch_size=batch_size,
-                pending_batch=pending_batch,
-                logger=logger,
-            )
-        else:
-            logger.warning(
-                "Connection to Hugging Face API failed. Skipping Hugging Face source."
-            )
-        if hf_scraped_count == 0:
-            logger.warning("[HF] No new papers scraped.")
-            logger.warning(
-                f"All fetched Hugging Face papers "
-                f"are already present in {output_path.name} "
-                f"({existing_counts.get(hf_source_key, 0)} existing)."
-            )
+        existing_df, pending_batch, count_hf = _run_scraper_source(
+            PublicationSourceName.HUGGINGFACE.value,
+            HF_PING_URL,
+            scrape_huggingface_source,
+            client,
+            existing_df,
+            existing_dois,
+            existing_counts,
+            output_path,
+            nb_test,
+            batch_size,
+            pending_batch,
+            logger,
+        )
+        total_scraped += count_hf
     # Execute Source: Europe PMC.
     if use_pmc:
-        if is_connection_to_server_working(client, EUROPE_PMC_PING_URL, logger=logger):
-            logger.success("Connection to Europe PMC API successful!")
-            existing_df, pending_batch, pmc_scraped_count = scrape_europe_pmc_source(
-                client=client,
-                existing_df=existing_df,
-                existing_dois=existing_dois,
-                output_path=output_path,
-                nb_test=nb_test,
-                batch_size=batch_size,
-                pending_batch=pending_batch,
-                logger=logger,
-            )
-        else:
-            logger.warning(
-                "Connection to Europe PMC API failed. Skipping Europe PMC source."
-            )
-        if pmc_scraped_count == 0:
-            logger.warning("[PMC] No new papers scraped.")
-            logger.warning(
-                f"All fetched Europe PMC papers "
-                f"are already present in {output_path.name} "
-                f"({existing_counts.get(pmc_source_key, 0)} existing)."
-            )
+        existing_df, pending_batch, count_pmc = _run_scraper_source(
+            PublicationSourceName.EUROPE_PMC.value,
+            EUROPE_PMC_PING_URL,
+            scrape_europe_pmc_source,
+            client,
+            existing_df,
+            existing_dois,
+            existing_counts,
+            output_path,
+            nb_test,
+            batch_size,
+            pending_batch,
+            logger,
+        )
+        total_scraped += count_pmc
     # Final batch save if any pending papers remain.
     if pending_batch:
         export_papers_to_parquet(
             existing_df, pending_batch, output_path, client, logger
         )
-    total_scraped = pmc_scraped_count + hf_scraped_count
     elapsed = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[0]
     logger.info(f"Total new papers saved: {total_scraped} to: {output_path}.")
     logger.success(f"Successfully completed scraping in {elapsed}.")
