@@ -917,7 +917,7 @@ def main(
             )
     # Final batch save if any pending papers remain.
     if pending_batch:
-        _existing_df = export_papers_to_parquet(
+        export_papers_to_parquet(
             existing_df, pending_batch, output_path, client, logger
         )
     total_scraped = pmc_scraped_count + hf_scraped_count
