@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block main %}
+<section class="hero-section select-none">
+    <canvas id="network-canvas" class="hero-canvas" title="Click to pause/play network animation"></canvas>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+        <h1 class="hero-title">
+            Welcome to <span class="gradient-text">MDverse</span>!
+        </h1>
+        <p class="hero-subtitle">The catalogue of Molecular Dynamics data.</p>
+        <form action="/explore" method="GET" class="hero-search-form">
+            <input type="hidden" name="tab" value="datasets">
+            <div class="hero-search-container">
+                <i class="fa-solid fa-magnifying-glass text-slate-400 text-xl ml-4"></i>
+                <input type="text" name="q"
+                    placeholder="Search by keyword across all datasets, files, publications, and AI models..."
+                    class="hero-search-input">
+                <button type="submit" class="hero-search-btn">
+                    <i class="fa-solid fa-magnifying-glass text-sm text-white"></i>
+                    <span>Search</span>
+                </button>
+            </div>
+        </form>
+        <div class="hero-examples">
+            <span class="text-slate-400">Examples:</span>
+            <a href="/explore?tab=datasets&q=GPCR" class="hero-example-tag">GPCR</a>
+            <a href="/explore?tab=datasets&q=PFAS" class="hero-example-tag">PFAS</a>
+            <a href="/explore?tab=publications&q=Coarse-Grained" class="hero-example-tag">Coarse-Grained Papers</a>
+            <a href="/explore?tab=datasets&q=SARS-CoV-2" class="hero-example-tag">SARS-CoV-2</a>
+            <a href="/explore?tab=files&q=gro" class="hero-example-tag">.gro files</a>
+            <span class="text-slate-500 mx-1">|</span>
+            <a href="/explore?tab=datasets" class="font-semibold text-indigo-400 hover:underline">Explore all data →</a>
+        </div>
+        <div class="hero-stats-date">
+            As of {{ banner_stats.last_update }}
+        </div>
+        <div class="hero-stats-grid">
+            <a href="/explore?tab=datasets" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.datasets }}</div>
+                <div class="hero-stat-label">Datasets</div>
+            </a>
+            <a href="/explore?tab=files" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.files }}</div>
+                <div class="hero-stat-label">Files</div>
+            </a>
+            <a href="/explore?tab=files&q=gro" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.structures }}</div>
+                <div class="hero-stat-label">Structures</div>
+            </a>
+            <a href="/explore?tab=files&q=xtc" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.trajectories }}</div>
+                <div class="hero-stat-label">Trajectories</div>
+            </a>
+            <a href="/explore?tab=publications" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.publications }}</div>
+                <div class="hero-stat-label">Publications</div>
+            </a>
+            <a href="/explore?tab=ai_models" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.ai_models }}</div>
+                <div class="hero-stat-label">AI Models</div>
+            </a>
+            <a href="/documentation#data-sources" class="hero-stat-card">
+                <div class="hero-stat-num">{{ banner_stats.sources }}</div>
+                <div class="hero-stat-label">Data Sources</div>
+            </a>
+        </div>
+    </div>
+</section>
+<!-- Include the JavaScript for the animated network background -->
+<script>
+    (function () {
+        // Retrieve the HTML5 canvas element and its 2D rendering context
+        const canvas = document.getElementById('network-canvas');
+        const ctx = canvas.getContext('2d');
+        // Set initial canvas dimensions to match offset parent container
+        let width = canvas.width = canvas.offsetWidth;
+        let height = canvas.height = canvas.offsetHeight;
+        // Animation state toggle and configuration parameters
+        let isRunning = true;
+        const numParticles = 65;
+        const particles = [];
+        const maxDistance = 160;
+        // Mouse interaction target tracking object
+        const mouse = { x: null, y: null, radius: 200 };
+        // Recalculate dimensions on viewport resize
+        window.addEventListener('resize', () => {
+            width = canvas.width = canvas.offsetWidth;
+            height = canvas.height = canvas.offsetHeight;
+        });
+        // Track cursor coordinates relative to canvas boundaries
+        canvas.parentElement.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        // Clear mouse target when cursor leaves container
+        canvas.parentElement.addEventListener('mouseleave', () => {
+            mouse.x = null;
+            mouse.y = null;
+        });
+        // Click canvas to toggle animation playback state
+        canvas.addEventListener('click', (e) => {
+            if (e.target !== canvas) return;
+            isRunning = !isRunning;
+            if (isRunning) animate();
+        });
+        // Particle node class representing moving network points
+        class Particle {
+            constructor() {
+                // Random initial placement on canvas
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                // Random velocity vectors (-0.4 to 0.4 px/frame)
+                this.vx = (Math.random() - 0.5) * 0.8;
+                this.vy = (Math.random() - 0.5) * 0.8;
+                // Random node size and glowing accent colors
+                this.radius = Math.random() * 3 + 4;
+                this.color = Math.random() > 0.5 ? '#818CF8' : '#C084FC';
+            }
+            // Update particle positions and bounce off screen edges
+            update() {
+                if (!isRunning) return;
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > width) this.vx *= -1;
+                if (this.y < 0 || this.y > height) this.vy *= -1;
+            }
+            // Render glowing particle node
+            draw() {
+                ctx.save();
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        // Instantiate initial particle set
+        for (let i = 0; i < numParticles; i++) {
+            particles.push(new Particle());
+        }
+        // Main animation rendering loop
+        function animate() {
+            // Clear canvas frame
+            ctx.clearRect(0, 0, width, height);
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+                // Draw connecting lines between nearby particles
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < maxDistance) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        // Fade stroke opacity based on distance ratio
+                        ctx.strokeStyle = `rgba(168, 85, 247, ${0.7 * (1 - dist / maxDistance)})`;
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+                }
+                // Draw interactive connecting lines to mouse cursor
+                if (mouse.x !== null && mouse.y !== null) {
+                    const mdx = particles[i].x - mouse.x;
+                    const mdy = particles[i].y - mouse.y;
+                    const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+                    if (mdist < mouse.radius) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(mouse.x, mouse.y);
+                        ctx.strokeStyle = `rgba(99, 102, 241, ${0.9 * (1 - mdist / mouse.radius)})`;
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+            // Request next frame if animation is active
+            if (isRunning) {
+                requestAnimationFrame(animate);
+            }
+        }
+        // Initialize animation execution
+        animate();
+    })();
+</script>
+{% endblock %}

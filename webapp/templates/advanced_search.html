@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <h1 class="text-2xl font-bold text-slate-900 mb-2">Advanced Search</h1>
+    <p class="text-sm text-slate-500 mb-8">Filter molecular dynamics datasets using combined criteria.</p>
+
+    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-10">
+        <form action="/advanced-search" method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-2">Title Keywords</label>
+                <input type="text" name="title" value="{{ filters.title }}" placeholder="e.g. Membrane"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-2">Data Source</label>
+                <select name="source"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">All Sources</option>
+                    {% for src in sources %}
+                    <option value="{{ src }}" {% if filters.source==src %}selected{% endif %}>{{ src }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-2">File Type</label>
+                <select name="file_type"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">All Types</option>
+                    {% for ft in file_types %}
+                    <option value="{{ ft }}" {% if filters.file_type==ft %}selected{% endif %}>{{ ft }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-2">Min. Number of Files</label>
+                <input type="number" name="min_files" value="{{ filters.min_files }}" placeholder="e.g. 5"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-2">Created Year</label>
+                <input type="text" name="year" value="{{ filters.year }}" placeholder="e.g. 2024"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="flex items-end gap-3">
+                <button type="submit"
+                    class="gradient-bg gradient-bg-hover text-white px-6 py-2 rounded-lg text-sm font-medium transition shadow-md w-full">Apply
+                    Filters</button>
+                <a href="/advanced-search"
+                    class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition text-center">Reset</a>
+            </div>
+        </form>
+    </div>
+
+    {% if results %}
+    <h2 class="text-lg font-semibold text-slate-900 mb-4">Search Results (Top 50)</h2>
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <table class="w-full text-left border-collapse text-sm">
+            <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-medium">
+                    <th class="py-3.5 px-4">Title</th>
+                    <th class="py-3.5 px-4">Source</th>
+                    <th class="py-3.5 px-4">Files</th>
+                    <th class="py-3.5 px-4">Date</th>
+                    <th class="py-3.5 px-4 text-right">Link</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for row in results %}
+                <tr class="hover:bg-slate-50/80">
+                    <td class="py-3.5 px-4 font-medium text-slate-900 max-w-md truncate">{{ row.title or 'Untitled' }}
+                    </td>
+                    <td class="py-3.5 px-4"><span
+                            class="px-2 py-1 rounded bg-slate-100 text-xs font-semibold text-slate-600">{{
+                            row.data_source_label }}</span></td>
+                    <td class="py-3.5 px-4 text-slate-600">{{ row.file_number or 0 }}</td>
+                    <td class="py-3.5 px-4 text-slate-500">{{ row.date_created or 'N/A' }}</td>
+                    <td class="py-3.5 px-4 text-right">
+                        <a href="{{ row.url_in_data_source }}" target="_blank"
+                            class="text-indigo-600 hover:text-indigo-800 font-medium">View <i
+                                class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

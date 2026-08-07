@@ -4,9 +4,14 @@ import time
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-from .frontend.controller import router as frontend_router
-from .frontend.datasets.controller import router as frontend_datasets_router
-from .frontend.file_types.controller import router as frontend_file_types_router
+from .api.v1.endpoints import router as api_v1_router
+from .frontend.ai_models import router as frontend_ai_models_router
+from .frontend.datasets import router as frontend_datasets_router
+from .frontend.explore import router as frontend_explore_router
+from .frontend.file_types import router as file_types_router
+from .frontend.navigation import router as frontend_navigation_router
+from .frontend.publications import router as frontend_publications_router
+from .frontend.tools import router as frontend_tools_router
 
 # ============================================================================
 # FastAPI app
@@ -14,7 +19,7 @@ from .frontend.file_types.controller import router as frontend_file_types_router
 print(f"Running FastAPI app from: {pathlib.Path().absolute()}")
 
 # Create FastAPI app
-app = FastAPI(title="MDverse")
+app = FastAPI(title="MDverse API")
 app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
 
 
@@ -33,6 +38,11 @@ async def add_process_time_header(request: Request, call_next):
 
 
 # Frontend endpoints
-app.include_router(frontend_router)
+app.include_router(frontend_navigation_router)
+app.include_router(frontend_explore_router)
 app.include_router(frontend_datasets_router)
-app.include_router(frontend_file_types_router)
+app.include_router(frontend_publications_router)
+app.include_router(frontend_ai_models_router)
+app.include_router(frontend_tools_router)
+app.include_router(file_types_router)
+app.include_router(api_v1_router)

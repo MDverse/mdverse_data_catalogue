@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="explore-container">
+
+    <div class="explore-header">
+        <div>
+            <h1 class="explore-title">Explore Data</h1>
+            <p class="explore-subtitle">Browse and filter datasets, publications, files, and AI models.</p>
+        </div>
+
+        <form action="/explore" method="GET" class="search-bar-form">
+            <input type="hidden" name="tab" value="{{ tab }}">
+            <input type="hidden" name="limit" value="{{ limit }}">
+            <input type="text" name="q" value="{{ q }}" placeholder="Filter results..." class="input-text">
+            <button type="submit" class="btn-filter">Filter</button>
+        </form>
+    </div>
+
+    <div class="tab-list">
+        <a href="/explore?tab=datasets&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            class="tab-item {% if tab == 'datasets' %}tab-active{% else %}tab-inactive{% endif %}">
+            <i class="fa-solid fa-database"></i> Datasets
+        </a>
+        <a href="/explore?tab=publications&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            class="tab-item {% if tab == 'publications' %}tab-active{% else %}tab-inactive{% endif %}">
+            <i class="fa-solid fa-book"></i> Publications
+        </a>
+        <a href="/explore?tab=files&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            class="tab-item {% if tab == 'files' %}tab-active{% else %}tab-inactive{% endif %}">
+            <i class="fa-solid fa-file"></i> File Types
+        </a>
+        <a href="/explore?tab=ai_models&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}"
+            class="tab-item {% if tab == 'ai_models' %}tab-active{% else %}tab-inactive{% endif %}">
+            <i class="fa-solid fa-brain"></i> AI Models
+        </a>
+    </div>
+
+    <div class="explore-grid">
+        <div class="main-column">
+            <div class="controls-bar">
+                <div class="limit-selector">
+                    <span>Show</span>
+                    <select id="limitSelect" onchange="changeLimit(this.value)" class="select-input">
+                        <option value="5" {% if limit==5 %}selected{% endif %}>5</option>
+                        <option value="10" {% if limit==10 %}selected{% endif %}>10</option>
+                        <option value="25" {% if limit==25 %}selected{% endif %}>25</option>
+                        <option value="50" {% if limit==50 %}selected{% endif %}>50</option>
+                    </select>
+                    <span>entries per page</span>
+                </div>
+                <div>Showing <strong>{{ results|length }}</strong> of <strong>{{ total_count }}</strong> entries</div>
+            </div>
+
+            <div class="table-card">
+                <div class="overflow-x-auto">
+                    <table class="data-table">
+
+                        {% if tab == 'datasets' %}
+                        <thead>
+                            <tr>
+                                <th class="col-title sortable" onclick="sortTable('title')">
+                                    Title <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 sortable" onclick="sortTable('repository')">
+                                    Repository <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-28 sortable" onclick="sortTable('created')">
+                                    Created <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-20 text-center sortable" onclick="sortTable('files')">
+                                    Files <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-24 text-center sortable" onclick="sortTable('publications')">
+                                    Publications <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-20 text-center sortable" onclick="sortTable('models')">
+                                    Models <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr>
+                                <td class="font-semibold text-slate-900 cell-wrap col-title">
+                                    <a href="/datasets/{{ row.dataset_id }}" class="link-primary">
+                                        {{ row.title or 'Untitled Dataset' }}
+                                    </a>
+                                </td>
+                                <td><span class="badge-slate">{{ row.data_source_label }}</span></td>
+                                <td class="text-slate-500 whitespace-nowrap">{{ row.date_created or 'N/A' }}</td>
+                                <td class="text-center font-semibold text-slate-700">{{ row.files_count }}</td>
+                                <td class="text-center font-semibold text-slate-700">{{ row.publications_count }}</td>
+                                <td class="text-center font-semibold text-slate-700">{{ row.ai_models_count }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="empty-row">No datasets found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+
+                        {% elif tab == 'publications' %}
+                        <thead>
+                            <tr>
+                                <th class="col-title sortable" onclick="sortTable('title')">
+                                    Title <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/5 sortable" onclick="sortTable('journal')">
+                                    Journal <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-20 sortable" onclick="sortTable('year')">
+                                    Year <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 sortable" onclick="sortTable('doi')">
+                                    DOI <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-24 text-center sortable" onclick="sortTable('datasets')">
+                                    Datasets <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr>
+                                <td class="font-semibold text-slate-900 cell-wrap col-title">
+                                    <a href="/publications/{{ row.publication_id }}" class="link-primary">
+                                        {{ row.title or 'N/A' }}
+                                    </a>
+                                </td>
+                                <td class="text-slate-600 cell-wrap">{{ row.journal or 'N/A' }}</td>
+                                <td class="text-slate-500">{{ row.year or 'N/A' }}</td>
+                                <td>
+                                    {% if row.doi %}
+                                    <a href="https://doi.org/{{ row.doi }}" target="_blank" class="link-mono">{{ row.doi
+                                        }}</a>
+                                    {% else %} N/A {% endif %}
+                                </td>
+                                <td class="text-center font-semibold text-slate-700">{{ row.datasets_count or 0 }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="empty-row">No publications found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+
+                        {% elif tab == 'files' %}
+                        <thead>
+                            <tr>
+                                <th class="w-1/6 sortable" onclick="sortTable('type')">
+                                    File Type <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/3 sortable" onclick="sortTable('comment')">
+                                    Description <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 sortable" onclick="sortTable('datasets')">
+                                    Datasets <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 sortable" onclick="sortTable('files')">
+                                    Files <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 text-right sortable" onclick="sortTable('size')">
+                                    Total Size (GB) <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-24 text-center"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr>
+                                <td>
+                                    <span class="file-type-pill">
+                                        <i class="fa-solid fa-file-code"></i>
+                                        <!-- Utilisation d'un fallback Jinja2 au cas où le champ soit vide ou nommé différemment -->
+                                        {{ row.file_type_label or row.file_type or row.extension or 'N/A' }}
+                                    </span>
+                                </td>
+                                <td class="text-slate-600 text-xs cell-wrap">
+                                    {{ row.comment or 'N/A' }}
+                                </td>
+                                <td class="font-semibold text-slate-900">
+                                    {{ "{:,}".format(row.number_of_datasets) }}
+                                </td>
+                                <td class="text-slate-600 font-medium">
+                                    {{ "{:,}".format(row.number_of_files) }}
+                                </td>
+                                <td class="text-right text-slate-700 font-mono font-medium">
+                                    {{ "{:,.2f}".format(row.total_size_in_GB) if row.total_size_in_GB is not none else 'N/A' }}
+                                </td>
+                                <td class="text-center">
+                                    <a href="/file_types/{{ (row.file_type_label or row.file_type or 'unknown')|lower }}/download_list/"
+                                        title="Download list (.tsv)" class="btn-tsv">
+                                        <i class="fa-solid fa-download text-[11px]"></i> TSV
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="empty-row">No file types statistics found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        {% elif tab == 'ai_models' %}
+                        <thead>
+                            <tr>
+                                <th class="col-title sortable" onclick="sortTable('name')">
+                                    Name <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-1/6 sortable" onclick="sortTable('tasks')">
+                                    Tasks <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-32 sortable" onclick="sortTable('params')">
+                                    Parameters <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-28 sortable" onclick="sortTable('created')">
+                                    Created On <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-24 text-center sortable" onclick="sortTable('datasets')">
+                                    Datasets <i class="fa-solid fa-sort text-xs ml-1"></i>
+                                </th>
+                                <th class="w-36 text-right">Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr>
+                                <td class="font-semibold text-slate-900 cell-wrap col-title">
+                                    <a href="/ai_models/{{ row.ai_model_id }}" class="link-primary">
+                                        {{ row.id_in_data_source or row.name or 'AI Model #' ~ row.ai_model_id }}
+                                    </a>
+                                </td>
+                                <td><span class="badge-indigo">{{ row.tasks or 'N/A' }}</span></td>
+                                <td class="font-mono text-slate-600">{{ row.number_of_parameters or 'N/A' }}</td>
+                                <td class="text-slate-500 whitespace-nowrap">{{ row.date_created or 'N/A' }}</td>
+                                <td class="text-center font-semibold text-slate-700">{{ row.datasets_count or 0 }}</td>
+                                <td class="text-right">
+                                    {% if row.url_in_data_source %}
+                                    <a href="{{ row.url_in_data_source }}" target="_blank" class="btn-huggingface">
+                                        View Model <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                                    </a>
+                                    {% else %} N/A {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="empty-row">No AI Models found.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+
+            {% if total_pages > 1 %}
+            <div class="pagination-bar">
+                <div>Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong></div>
+
+                <div class="pagination-buttons">
+                    {% if page > 1 %}
+                    <a href="/explore?tab={{ tab }}&page={{ page - 1 }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}{% endif %}"
+                        class="btn-page">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i> Prev
+                    </a>
+                    {% endif %}
+
+                    {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <span class="btn-page-active">{{ p }}</span>
+                    {% elif p <= 3 or p>= total_pages - 2 or (p >= page - 1 and p <= page + 1) %} <a
+                            href="/explore?tab={{ tab }}&page={{ p }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}{% endif %}"
+                            class="btn-page">
+                            {{ p }}
+                            </a>
+                            {% elif p == 4 or p == total_pages - 3 %}
+                            <span class="px-2 py-1.5 text-slate-400 text-xs">...</span>
+                            {% endif %}
+                            {% endfor %}
+
+                            {% if page < total_pages %} <a
+                                href="/explore?tab={{ tab }}&page={{ page + 1 }}&limit={{ limit }}{% if q %}&q={{ q }}{% endif %}{% if sort_by %}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}{% endif %}"
+                                class="btn-page">
+                                Next <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                                </a>
+                                {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <aside class="sidebar-card">
+            <h2 class="sidebar-title">
+                <i class="fa-solid fa-sliders text-indigo-600"></i> Advanced Search
+            </h2>
+
+            <form action="/explore" method="GET" class="space-y-4">
+                <input type="hidden" name="tab" value="{{ tab }}">
+                <input type="hidden" name="limit" value="{{ limit }}">
+                {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+
+                <details class="accordion-group" open>
+                    <summary class="accordion-header">
+                        External Database <i class="fa-solid fa-chevron-down accordion-icon"></i>
+                    </summary>
+                    <div class="accordion-body">
+                        <div>
+                            <label class="input-label">PDB ID</label>
+                            <input type="text" name="pdb_id" value="{{ sidebar_filters.pdb_id }}"
+                                placeholder="e.g. 1AK4" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">UniProt ID</label>
+                            <input type="text" name="uniprot_id" value="{{ sidebar_filters.uniprot_id }}"
+                                placeholder="e.g. P08183" class="input-field">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="accordion-group">
+                    <summary class="accordion-header">
+                        Simulation Parameters <i class="fa-solid fa-chevron-down accordion-icon"></i>
+                    </summary>
+                    <div class="accordion-body">
+                        <div>
+                            <label class="input-label">Software Name</label>
+                            <input type="text" name="software" value="{{ sidebar_filters.software }}"
+                                placeholder="e.g. GROMACS, NAMD" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">Temperature (K)</label>
+                            <input type="text" name="temperature" value="{{ sidebar_filters.temperature }}"
+                                placeholder="e.g. 300" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">Force Field</label>
+                            <input type="text" name="force_field" value="{{ sidebar_filters.force_field }}"
+                                placeholder="e.g. CHARMM36" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">Water Model</label>
+                            <input type="text" name="water_model" value="{{ sidebar_filters.water_model }}"
+                                placeholder="e.g. TIP3P" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">Timestep (fs)</label>
+                            <input type="text" name="timestep" value="{{ sidebar_filters.timestep }}"
+                                placeholder="e.g. 2.0" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">Simulation Time (ns)</label>
+                            <input type="text" name="simulation_time" value="{{ sidebar_filters.simulation_time }}"
+                                placeholder="e.g. 100" class="input-field">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="accordion-group">
+                    <summary class="accordion-header">
+                        Authors <i class="fa-solid fa-chevron-down accordion-icon"></i>
+                    </summary>
+                    <div class="accordion-body">
+                        <div>
+                            <label class="input-label">By ORCID</label>
+                            <input type="text" name="author_orcid" value="{{ sidebar_filters.author_orcid }}"
+                                placeholder="0000-0000-0000-0000" class="input-field">
+                        </div>
+                        <div>
+                            <label class="input-label">By Name</label>
+                            <input type="text" name="author_name" value="{{ sidebar_filters.author_name }}"
+                                placeholder="Author name" class="input-field">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="accordion-group">
+                    <summary class="accordion-header">
+                        Molecule Type <i class="fa-solid fa-chevron-down accordion-icon"></i>
+                    </summary>
+                    <div class="p-3 bg-white border-t border-slate-200 text-xs">
+                        <select name="molecule_type" class="input-field">
+                            <option value="">All Molecules</option>
+                            <option value="PROTEIN" {% if sidebar_filters.molecule_type=='PROTEIN' %}selected{% endif
+                                %}>Protein</option>
+                            <option value="LIPID" {% if sidebar_filters.molecule_type=='LIPID' %}selected{% endif %}>
+                                Lipid</option>
+                            <option value="NUCLEIC ACID" {% if sidebar_filters.molecule_type=='NUCLEIC ACID'
+                                %}selected{% endif %}>Nucleic Acid</option>
+                        </select>
+                    </div>
+                </details>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit"
+                        class="btn-apply font-semibold py-2 rounded-lg text-xs transition shadow w-full">Apply
+                        Filters</button>
+                    <a href="/explore?tab={{ tab }}&limit={{ limit }}" class="btn-reset">Reset</a>
+                </div>
+            </form>
+        </aside>
+
+    </div>
+</div>
+
+<script>
+    function sortTable(column) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentSort = urlParams.get('sort_by');
+        const currentDir = urlParams.get('sort_dir') || 'desc';
+
+        let newDir = 'desc';
+        if (currentSort === column && currentDir === 'desc') {
+            newDir = 'asc';
+        }
+
+        urlParams.set('sort_by', column);
+        urlParams.set('sort_dir', newDir);
+        urlParams.set('page', '1');
+        window.location.search = urlParams.toString();
+    }
+
+    function changeLimit(newLimit) {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.set('limit', newLimit);
+        urlParams.set('page', '1');
+        window.location.search = urlParams.toString();
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+    <!-- Tool Header -->
+    <header class="mb-8">
+        <span class="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-bold uppercase tracking-wider">
+            Tool
+        </span>
+        <h1 class="text-3xl font-extrabold text-slate-900 mt-2">{% block tool_title %}{% endblock %}</h1>
+        <p class="text-slate-600 text-sm mt-1">{% block tool_subtitle %}{% endblock %}</p>
+    </header>
+
+    <!-- How It Works Section -->
+    <section class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 mb-8">
+        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-circle-info text-indigo-600"></i> How it works
+        </h2>
+        <div class="text-sm text-slate-600 leading-relaxed">
+            {% block tool_description %}{% endblock %}
+        </div>
+    </section>
+
+    <!-- Interactive Tool Container -->
+    <section class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        {% block tool_form %}{% endblock %}
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <a href="/explore?tab=ai_models"
+        class="inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800 mb-6">
+        <i class="fa-solid fa-arrow-left mr-2"></i> Back to AI Models
+    </a>
+
+    <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-8">
+        <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
+            <div>
+                <span
+                    class="px-2.5 py-1 rounded bg-yellow-100 text-yellow-800 text-xs font-bold uppercase tracking-wider">
+                    {{ model.tasks or 'AI Model' }}
+                </span>
+                <h1 class="text-2xl font-bold text-slate-900 mt-2">{{ model.id_in_data_source }}</h1>
+            </div>
+            {% if model.url_in_data_source %}
+            <a href="{{ model.url_in_data_source }}" target="_blank"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-yellow-400 text-yellow-950 rounded-lg text-sm font-semibold hover:bg-yellow-500 transition shadow-sm">
+                View on HuggingFace <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i>
+            </a>
+            {% endif %}
+        </div>
+
+        <p class="text-slate-600 text-sm leading-relaxed mb-6">{{ model.description or 'No description available.' }}
+        </p>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-100 text-xs text-slate-600">
+            <div><span class="block font-semibold text-slate-400">Parameters</span> {{ model.number_of_parameters or
+                'N/A' }}</div>
+            <div><span class="block font-semibold text-slate-400">Created On</span> {{ model.date_created or 'N/A' }}
+            </div>
+            <div><span class="block font-semibold text-slate-400">License</span> {{ model.license or 'N/A' }}</div>
+        </div>
+    </div>
+
+    {% if datasets %}
+    <div class="mb-8">
+        <h2 class="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2"><i
+                class="fa-solid fa-database text-indigo-600"></i> Linked Datasets ({{ datasets|length }})</h2>
+        <div class="grid gap-3">
+            {% for d in datasets %}
+            <div class="p-4 bg-white border border-slate-200 rounded-lg flex justify-between items-center text-sm">
+                <a href="/datasets/{{ d.dataset_id }}" class="font-semibold text-slate-900 hover:text-indigo-600">{{
+                    d.title or 'Untitled Dataset' }}</a>
+                {% if d.url_in_data_source %}<a href="{{ d.url_in_data_source }}" target="_blank"
+                    class="text-indigo-600 text-xs hover:underline">Source Link <i
+                        class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i></a>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if publications %}
+    <div>
+        <h2 class="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2"><i
+                class="fa-solid fa-book text-indigo-600"></i> Linked Publications ({{ publications|length }})</h2>
+        <div class="grid gap-3">
+            {% for pub in publications %}
+            <div class="p-4 bg-white border border-slate-200 rounded-lg flex justify-between items-center text-sm">
+                <div>
+                    <a href="/publications/{{ pub.publication_id }}"
+                        class="font-semibold text-slate-900 hover:text-indigo-600">{{ pub.title }}</a>
+                    <div class="text-xs text-slate-500 mt-1">{{ pub.journal or '' }} ({{ pub.year or 'N/A' }})</div>
+                </div>
+                {% if pub.doi %}<a href="https://doi.org/{{ pub.doi }}" target="_blank"
+                    class="text-indigo-600 font-mono text-xs hover:underline">{{ pub.doi }}</a>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

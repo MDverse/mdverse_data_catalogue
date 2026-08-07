@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-8 space-y-6">
+    <!-- Link Back -->
+    <a href="/explore?tab=publications" class="link text-sm">
+        <i class="fa-solid fa-arrow-left text-xs"></i> Back to Publications
+    </a>
+
+    <!-- Top Unified Header Card -->
+    <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+
+            <div class="space-y-3 flex-1">
+                <!-- Badges Bar: Journal & Year -->
+                <div class="flex items-center gap-2 flex-wrap text-xs">
+                    <span class="px-2.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold uppercase tracking-wider">
+                        {{ publication.journal or 'Journal' }}
+                    </span>
+
+                    {% if publication.year %}
+                    <span
+                        class="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-medium">
+                        {{ publication.year }}
+                    </span>
+                    {% endif %}
+
+                    {% if publication.doi %}
+                    <a href="https://doi.org/{{ publication.doi }}" target="_blank"
+                        class="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-medium">
+                        DOI: {{ publication.doi }}
+                    </a>
+                    {% endif %}
+                </div>
+
+                <!-- Title -->
+                <h1 class="text-2xl font-bold text-slate-900 leading-tight">
+                    {{ publication.title or 'Untitled Publication' }}
+                </h1>
+
+                <!-- Authors -->
+                {% if authors %}
+                <div class="flex flex-wrap gap-2 items-center">
+                    {% for author in authors %}
+                    <span
+                        class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+                        <i class="fa-solid fa-user text-slate-400 text-[10px]"></i>
+                        {{ author.full_name }}
+                        {% if author.orcid %}
+                        <a href="https://orcid.org/{{ author.orcid }}" target="_blank"
+                            class="text-emerald-600 hover:underline">
+                            <i class="fa-brands fa-orcid"></i>
+                        </a>
+                        {% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Abstract / Description -->
+                {% if publication.abstract %}
+                <p class="text-slate-600 text-sm leading-relaxed">
+                    {{ publication.abstract }}
+                </p>
+                {% endif %}
+
+                <!-- Keywords -->
+                {% if publication.keywords %}
+                <div class="flex flex-wrap gap-1.5 items-center pt-1">
+                    <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-1">Keywords:</span>
+                    {% for kw in publication.keywords.replace(';', ',').split(',') %}
+                    {% if kw.strip() %}
+                    <span class="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-xs font-medium">
+                        {{ kw.strip() }}
+                    </span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- External DOI Article Link Button -->
+            {% if publication.doi %}
+            <a href="https://doi.org/{{ publication.doi }}" target="_blank"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition shrink-0 self-start">
+                View on Repository <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <!-- Main Content Layout (65% Left / 35% Right) -->
+    <div class="detail-layout">
+        <!-- Left Column (65%) -->
+        <div class="detail-left space-y-6">
+
+            <!-- Linked Datasets Card -->
+            {% if datasets %}
+            <div class="table-card p-6 space-y-3">
+                <h2 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-database text-indigo-600"></i> Linked Datasets ({{ datasets|length }})
+                </h2>
+                <div class="space-y-3">
+                    {% for d in datasets %}
+                    <div
+                        class="p-3.5 rounded-lg bg-slate-50 border border-slate-200/70 flex justify-between items-center text-sm">
+                        <div>
+                            <a href="/datasets/{{ d.dataset_id }}" class="link font-semibold">
+                                {{ d.title or 'Untitled Dataset' }}
+                            </a>
+                            <span class="badge-indigo text-[10px] ml-2">{{ d.data_source_label }}</span>
+                        </div>
+                        {% if d.url_in_data_source %}
+                        <a href="{{ d.url_in_data_source }}" target="_blank" class="link-external text-xs">
+                            Source Link <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Linked AI Models Card -->
+            {% if models %}
+            <div class="table-card p-6 space-y-3">
+                <h2 class="text-base font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-brain text-indigo-600"></i> Linked AI Models ({{ models|length }})
+                </h2>
+                <div class="space-y-3">
+                    {% for m in models %}
+                    <div
+                        class="p-3.5 rounded-lg bg-slate-50 border border-slate-200/70 flex justify-between items-center text-sm">
+                        <div>
+                            <a href="/ai_models/{{ m.ai_model_id }}" class="link font-semibold">
+                                {{ m.id_in_data_source }}
+                            </a>
+                            <p class="text-xs text-slate-500 mt-0.5">{{ m.tasks or 'No task specified' }}</p>
+                        </div>
+                        {% if m.url_in_data_source %}
+                        <a href="{{ m.url_in_data_source }}" target="_blank" class="btn-huggingface whitespace-nowrap">
+                            View Model
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endblock %}
