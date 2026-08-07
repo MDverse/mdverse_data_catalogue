@@ -54,6 +54,7 @@ dependencies = [
     "cachetools>=7.0.6",
     "dateparser>=1.4.0",
     "unzip-http>=0.7",
+    "duckdb>=1.5.5",
 ]
 
 [dependency-groups]
