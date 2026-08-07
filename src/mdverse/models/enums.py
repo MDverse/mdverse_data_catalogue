@@ -25,6 +25,7 @@ class DatasetSourceName(StrEnum):
     MDPOSIT_INRIA_NODE = "mdposit_inria_node"
     MDPOSIT_MMB_NODE = "mdposit_mmb_node"
     MDPOSIT_CINECA_NODE = "mdposit_cineca_node"
+    HUGGINGFACE = "huggingface"
 
     @property
     def url(self) -> str | None:
@@ -40,6 +41,7 @@ class DatasetSourceName(StrEnum):
             DatasetSourceName.MDPOSIT_MMB_NODE: "https://irb-dev.mddbr.eu/",
             DatasetSourceName.MDPOSIT_INRIA_NODE: "https://inria.mddbr.eu/",
             DatasetSourceName.MDPOSIT_CINECA_NODE: "https://cineca.mddbr.eu/",
+            DatasetSourceName.HUGGINGFACE: "https://huggingface.co/",
         }
         return urls.get(self)
 
@@ -81,6 +83,10 @@ class DatasetSourceName(StrEnum):
                 "vol. 22, p. 641-645, 2025. Nature Publishing Group, 2025. "
                 "https://hdl.handle.net/2445/220970"
             ),
+            DatasetSourceName.HUGGINGFACE: (
+                "Wolf, Thomas, et al. 'Huggingface's transformers: State-of-the-art "
+                "natural language processing.' arXiv preprint arXiv:1910.03771 (2019)."
+            ),
         }
         return citations.get(self)
 
@@ -120,8 +126,72 @@ class DatasetSourceName(StrEnum):
                 "is to ease and promote data sharing along the wide-world scientific "
                 "community in order to contribute in research."
             ),
+            DatasetSourceName.HUGGINGFACE: (
+                "The AI community building the future. The platform where the machine "
+                "learning community collaborates on models, datasets, and applications."
+            ),
         }
         return comments.get(self)
+
+
+class PublicationSourceName(StrEnum):
+    """Molecular dynamics publication sources."""
+
+    EUROPE_PMC = "europe_pmc"
+    HUGGINGFACE = "huggingface"
+    ARXIV = "arxiv"
+
+    @property
+    def url(self) -> str | None:
+        """Return the base URL for the publication source."""
+        urls = {
+            PublicationSourceName.EUROPE_PMC: "https://europepmc.org/",
+            PublicationSourceName.HUGGINGFACE: "https://huggingface.co/",
+            PublicationSourceName.ARXIV: "https://arxiv.org/",
+        }
+        return urls.get(self)
+
+    @property
+    def comment(self) -> str | None:
+        """Return default descriptive comment for the publication source."""
+        comments = {
+            PublicationSourceName.EUROPE_PMC: (
+                "Europe PubMed Central (Europe PMC) is a free database of life "
+                "sciences and biomedical literature."
+            ),
+            PublicationSourceName.HUGGINGFACE: (
+                "The AI community building the future. The platform where the machine "
+                "learning community collaborates on models, datasets, and applications."
+            ),
+            PublicationSourceName.ARXIV: (
+                "arXiv is a free distribution service and an open-access archive for "
+                "scholarly articles in the fields of physics, mathematics, computer "
+                "science, quantitative biology, quantitative finance, statistics, "
+                "electrical engineering and systems science, and economics."
+            ),
+        }
+        return comments.get(self)
+
+    @property
+    def citation(self) -> str | None:
+        """Return default citation for the publication source."""
+        citations = {
+            PublicationSourceName.EUROPE_PMC: (
+                "Europe PMC Consortium. “Europe PMC: a full-text literature database "
+                "for the life sciences and platform for innovation.” Nucleic acids "
+                "research vol. 43,Database issue (2015): D1042-8. "
+                "doi:10.1093/nar/gku1061."
+            ),
+            PublicationSourceName.HUGGINGFACE: (
+                "Wolf, Thomas, et al. 'Huggingface's transformers: State-of-the-art "
+                "natural language processing.' arXiv preprint arXiv:1910.03771 (2019)."
+            ),
+            PublicationSourceName.ARXIV: (
+                "Ginsparg, Paul. “ArXiv at 20.” Nature vol. 476,7359 145-7. "
+                "10 Aug. 2011, doi:10.1038/476145a"
+            ),
+        }
+        return citations.get(self)
 
 
 class ExternalDatabaseName(StrEnum):
