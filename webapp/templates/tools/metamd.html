@@ -1,0 +1,29 @@
+{% extends "tools/base.html" %}
+
+{% block tool_title %}MetaMD{% endblock %}
+{% block tool_subtitle %}Enhance dataset FAIRness and metadata quality.{% endblock %}
+
+{% block tool_description %}
+<p>
+    Paste your dataset text below. MetaMD extracts key parameters (molecules, software, force fields, water models,
+    temperatures, and simulation times) and flags missing metadata required for reproducibility. Learn more in the
+    <a href="/documentation#tool-metamd" class="link">MetaMD documentation</a>.
+</p>
+{% endblock %}
+
+{% block tool_form %}
+<form action="/tools/metamd/annotate" method="POST" class="space-y-4">
+    <div>
+        <label for="description_text" class="input-label font-semibold">
+            Dataset Description
+        </label>
+        <textarea id="description_text" name="description_text" rows="6" required
+            placeholder="Paste text here (e.g., '100 ns simulation of POPC bilayer using GROMACS 2023 and CHARMM36m with TIP3P water at 310 K...')"
+            class="input-field text-sm"></textarea>
+    </div>
+
+    <button type="submit" class="btn-apply flex items-center justify-center gap-2 py-2.5">
+        <i class="fa-solid fa-wand-magic-sparkles text-xs"></i> Annotate Text
+    </button>
+</form>
+{% endblock %}

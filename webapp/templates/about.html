@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block main %}
+<div class="max-w-4xl mx-auto px-4 py-12">
+
+    <!-- Section 1: What is MDverse? -->
+    <section class="space-y-4">
+        <div>
+            <h1 class="text-3xl font-extrabold text-slate-900 mb-1">
+                What is <span class="gradient-text">MDverse</span>?
+            </h1>
+            <p class="text-base text-slate-500">And what it is not.</p>
+        </div>
+
+        <div class="about-card space-y-4 text-slate-700 leading-relaxed text-sm">
+            <p>
+                <strong>MDverse</strong> is the data catalogue of molecular dynamics (MD) simulations.
+                It indexes, annotates, and shares datasets and files related to MD simulations
+                with the purpose of fostering dissemination and reuse.
+            </p>
+            <p>
+                MDverse is <strong>not a data repository</strong> and does not host any MD data.
+                It works like a search engine with added value for the MD community.
+            </p>
+            <p class="pt-2 border-t border-slate-100 text-xs text-slate-600">
+                MDverse metadata will be integrated into the discovery platform developed by the EOSC
+                <a href="https://lumenproject.eu/" target="_blank" class="link">LUMEN project</a>.
+            </p>
+        </div>
+    </section>
+
+    <hr class="border-slate-200 my-8">
+
+    <!-- Section 2: Who is running MDverse? -->
+    <section class="space-y-4">
+        <h2 class="text-2xl font-bold text-slate-900">
+            Who is running <span class="gradient-text">MDverse</span>?
+        </h2>
+
+        <div class="about-card space-y-4 text-slate-700 text-sm">
+            <p>
+                MDverse was created by <strong>Johanna Tiemann</strong>, <strong>Matthieu Chavent</strong>, and
+                <strong>Pierre Poulain</strong>.
+                See original publication:
+                <a href="https://elifesciences.org/articles/90061" target="_blank" class="link">
+                    MDverse, shedding light on the dark matter of molecular dynamics simulations
+                </a>, <em>eLife</em>, 2024
+                (DOI: <a href="https://doi.org/10.7554/eLife.90061.3" target="_blank"
+                    class="link">10.7554/eLife.90061.3</a>).
+            </p>
+
+            <div class="note-box">
+                📝 <strong>The “Dark Matter of Molecular Dynamics Simulations”</strong> refers to data that is
+                technically accessible, but neither indexed, curated, nor easily searchable.
+            </div>
+
+            <p class="pt-2 border-t border-slate-100 text-slate-600">
+                MDverse is now maintained and operated by <strong>Matthieu Chavent</strong> and <strong>Pierre
+                    Poulain</strong>.
+            </p>
+        </div>
+    </section>
+
+</div>
+{% endblock %}

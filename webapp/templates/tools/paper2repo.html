@@ -1,0 +1,41 @@
+{% extends "tools/base.html" %}
+
+{% block tool_title %}Paper2Repo{% endblock %}
+{% block tool_subtitle %}Generate repository-ready metadata from preprints.{% endblock %}
+
+{% block tool_description %}
+<p class="text-sm text-slate-600 leading-relaxed">
+    Provide a preprint DOI, URL, or upload a PDF to automatically generate standardized dataset descriptions, keywords,
+    and metadata formatted for public repository submission.
+    Learn more in the <a href="/documentation#tool-paper2repo" class="link">Paper2Repo documentation</a>.
+</p>
+{% endblock %}
+
+{% block tool_form %}
+<form action="/tools/paper2repo/process" method="POST" enctype="multipart/form-data" class="space-y-4">
+
+    <div>
+        <label for="preprint_input" class="input-label font-semibold">
+            Preprint DOI or URL
+        </label>
+        <input type="text" id="preprint_input" name="preprint_input"
+            placeholder="e.g. 10.1101/2024.01.15.575642 or https://biorxiv.org/..." class="input-field text-sm">
+    </div>
+    <div class="text-xs text-slate-400 text-center font-medium my-1">— OR —</div>
+    <div>
+        <label class="input-label font-semibold">Upload Preprint Document</label>
+        <div class="flex items-center gap-3">
+            <label
+                class="btn-tsv">
+                Browse PDF
+                <input type="file" id="pdf_file_input" name="pdf_file" accept=".pdf" class="hidden"
+                    onchange="document.getElementById('file-chosen').textContent = this.files[0] ? this.files[0].name : 'No file selected';">
+            </label>
+            <span id="file-chosen" class="text-xs text-slate-500 italic">No file selected</span>
+        </div>
+    </div>
+    <button type="submit" class="btn-apply flex items-center justify-center gap-2 py-2.5 w-full">
+        <i class="fa-solid fa-gear text-xs"></i> Extract & Generate Description
+    </button>
+</form>
+{% endblock %}
