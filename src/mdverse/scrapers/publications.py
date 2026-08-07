@@ -759,8 +759,6 @@ def main(
     existing_df, existing_dois, existing_counts = (
         load_existing_publications_from_parquet(output_path)
     )
-    pmc_source_key = PublicationSourceName.EUROPE_PMC.value
-    hf_source_key = PublicationSourceName.HUGGINGFACE.value
     logger.info(
         f"Loaded {len(existing_dois)} total existing papers from {output_path.name}."
     )
@@ -809,9 +807,7 @@ def main(
         total_scraped += count_pmc
     # Final batch save if any pending papers remain.
     if pending_batch:
-        export_papers_to_parquet(
-            existing_df, pending_batch, output_path, client, logger
-        )
+        export_papers_to_parquet(existing_df, pending_batch, output_path, logger)
     elapsed = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[0]
     logger.info(f"Total new papers saved: {total_scraped} to: {output_path}.")
     logger.success(f"Successfully completed scraping in {elapsed}.")
