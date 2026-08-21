@@ -222,7 +222,7 @@ This populates the `datasets`, `authors`, and `data_sources` tables.
 Then, ingest all `files`. For instance, for Zenodo data repository:
 
 ```sh
-uv run database-ingest -db data/database.duckdb --type files --parquet /path/to/scraped_data/zenodo_files.parquet
+uv run database-ingest --db data/database.duckdb --type files --parquet /path/to/scraped_data/zenodo_files.parquet
 ```
 
 This populates the `files` and `file_types` tables.
