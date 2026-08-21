@@ -53,6 +53,7 @@ dependencies = [
     "uvicorn>=0.45.0",
     "cachetools>=7.0.6",
     "dateparser>=1.4.0",
+    "duckdb>=1.5.3",
     "unzip-http>=0.7",
 ]
 
@@ -95,3 +96,4 @@ database-create = "mdverse.database.create_database:main"
 database-ingest = "mdverse.database.ingest_data:main"
 database-report = "mdverse.database.report:main"
 database-query = "mdverse.database.query:main"
+database-delete = "mdverse.database.delete_data:main"

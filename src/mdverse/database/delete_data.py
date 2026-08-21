@@ -1,317 +1,235 @@
-"""
-Purpose:
-    Remove data from the database in two modes:
+"""Remove datasets or entire data sources from MDverse DuckDB database."""
 
-    1. DATASET mode — removes a single dataset identified by its repository
-                      name (--datarepo) and its ID within that repository
-                      (--dataset).
-    2. SOURCE  mode — removes ALL datasets (and every related record) that
-                      belong to a given data source; omit --dataset to
-                      trigger this mode.
-
-How it works:
-    Deletions always cascade from the deepest child tables up to the parent,
-    respecting foreign-key constraints:
-
-        TopologyFile    ─┐
-        ParameterFile   ├─► File ──┐
-        TrajectoryFile  ─┘         ├─► Dataset ──► DataSource (source mode only)
-        DatasetAuthorLink ─────────┘
-
-    All deletions for a single run happen inside ONE transaction. If anything
-    fails the entire transaction is rolled back automatically, so the database
-    is never left in a half-deleted state.
-
-Performance:
-    All target IDs are collected with a single SELECT before any DELETE is
-    issued. Each table is then wiped with one bulk DELETE ... WHERE id IN (...)
-    statement — no Python loop, no per-row round-trips.
-
-Usage:
-    # Delete an entire data source (always dry-run first)
-    uv run delete_data.py --datarepo zenodo --dry-run
-    uv run delete_data.py --datarepo zenodo
-
-    # Delete a single dataset within a source (always dry-run first)
-    uv run delete_data.py --datarepo zenodo --dataset 1234567 --dry-run
-    uv run delete_data.py --datarepo zenodo --dataset 1234567
-"""
-
-import sys
-import argparse
 import time
 from datetime import timedelta
 from pathlib import Path
 
+import click
+import duckdb
 from loguru import logger
-from sqlmodel import Session, select, func
-from sqlalchemy import delete
 
-from db_schema import (
-    engine,
-    Dataset,
-    DataSource,
-    DatasetAuthorLink,
-    File,
-    TopologyFile,
-    ParameterFile,
-    TrajectoryFile,
-)
+from mdverse.core.logger import create_logger
+from mdverse.database.ingest_data import init_db_connection
 
-
-# ============================================================================
-# Logger
-# ============================================================================
-
-logger.remove()
-logger.add(
-    sys.stderr,
-    format="{time:MMMM D, YYYY - HH:mm:ss} | <lvl>{level:<8} | {message}</lvl>",
-    level="DEBUG",
-)
-logger.add(
-    f"{Path(__file__).stem}.log",
-    mode="w",
-    format="{time:YYYY-MM-DDTHH:mm:ss} | <lvl>{level:<8} | {message}</lvl>",
-    level="DEBUG",
-)
+TABLE_MAP = [
+    ("molecules_external_databases", "molecule_id", "MoleculeExternalDB"),
+    ("molecules", "annotation_id", "Molecule"),
+    ("annotations", "dataset_id", "Annotation"),
+    ("datasets_authors_link", "dataset_id", "DatasetAuthorLink"),
+    ("files", "dataset_id", "File"),
+    ("datasets", "dataset_id", "Dataset"),
+]
 
 
-# ============================================================================
-# Core deletion logic
-# ============================================================================
+def fetch_ids(conn: duckdb.DuckDBPyConnection, sql: str, params: list) -> list[int]:
+    """Execute a query and return flat list of retrieved IDs.
 
-SQLITE_MAX_VARS = 999  # SQLite hard limit on parameters per query
-
-
-def _chunked(ids: list[int], size: int = SQLITE_MAX_VARS):
-    """Yield successive chunks of `size` from a list of IDs."""
-    for i in range(0, len(ids), size):
-        yield ids[i : i + size]
-
-
-def _count_rows(session: Session, Model, id_column, ids: list[int]) -> int:
-    """Count rows in Model where id_column is in ids (chunked for SQLite)."""
-    if not ids:
-        return 0
-    total = 0
-    for chunk in _chunked(ids):
-        total += session.exec(
-            select(func.count()).select_from(Model).where(id_column.in_(chunk))
-        ).one()
-    return total
-
-
-def _chunked_delete(session: Session, Model, id_column, ids: list[int]) -> int:
-    """Bulk-delete rows where id_column is in ids (chunked for SQLite).
-    Returns total number of deleted rows."""
-    if not ids:
-        return 0
-    total = 0
-    for chunk in _chunked(ids):
-        result = session.exec(delete(Model).where(id_column.in_(chunk)))
-        total += result.rowcount
-    return total
-
-
-def _delete_by_dataset_ids(session: Session, dataset_ids: list[int], dry_run: bool) -> dict:
+    Returns
+    -------
+        list[int]: Flat list of IDs.
     """
-    Delete (or count) every record that belongs to the given dataset PKs.
+    return [row[0] for row in conn.execute(sql, params).fetchall()]
 
-    Deletion order (child → parent):
-        TopologyFile / ParameterFile / TrajectoryFile
-            → DatasetAuthorLink (datasets_authors_link)
-            → File
-            → Dataset
 
-    Returns a dict with row counts per table.
+def collect_ids(
+    conn: duckdb.DuckDBPyConnection, dataset_ids: list[int]
+) -> dict[str, list[int]]:
+    """Collect related IDs for given dataset IDs in child-first dependency.
+
+    Returns
+    -------
+        dict[str, list[int]]: Dictionary of collected target IDs.
     """
     if not dataset_ids:
-        return {}
+        return {"dataset": [], "file": [], "annotation": [], "molecule": []}
 
-    # Collect file PKs for these datasets (chunked for SQLite)
-    file_ids: list[int] = []
-    for chunk in _chunked(dataset_ids):
-        file_ids.extend(
-            session.exec(
-                select(File.file_id).where(File.dataset_id.in_(chunk))
-            ).all()
+    fmt = ",".join("?" * len(dataset_ids))
+    file_ids = fetch_ids(
+        conn,
+        f"SELECT file_id FROM files WHERE dataset_id IN ({fmt})",  # noqa: S608
+        dataset_ids,
+    )
+    ann_ids = fetch_ids(
+        conn,
+        f"SELECT annotation_id FROM annotations WHERE dataset_id IN ({fmt})",  # noqa: S608
+        dataset_ids,
+    )
+
+    mol_ids = []
+    if ann_ids:
+        afmt = ",".join("?" * len(ann_ids))
+        mol_ids = fetch_ids(
+            conn,
+            f"SELECT molecule_id FROM molecules WHERE annotation_id IN ({afmt})",  # noqa: S608
+            ann_ids,
         )
 
-    if dry_run:
-        return {
-            "TopologyFile":          _count_rows(session, TopologyFile,      TopologyFile.file_id,        file_ids),
-            "ParameterFile":         _count_rows(session, ParameterFile,     ParameterFile.file_id,       file_ids),
-            "TrajectoryFile":        _count_rows(session, TrajectoryFile,    TrajectoryFile.file_id,      file_ids),
-            "DatasetAuthorLink":     _count_rows(session, DatasetAuthorLink, DatasetAuthorLink.dataset_id, dataset_ids),
-            "File":                  len(file_ids),
-            "Dataset":               len(dataset_ids),
-        }
-
     return {
-        "TopologyFile":          _chunked_delete(session, TopologyFile,      TopologyFile.file_id,        file_ids),
-        "ParameterFile":         _chunked_delete(session, ParameterFile,     ParameterFile.file_id,       file_ids),
-        "TrajectoryFile":        _chunked_delete(session, TrajectoryFile,    TrajectoryFile.file_id,      file_ids),
-        "DatasetAuthorLink":     _chunked_delete(session, DatasetAuthorLink, DatasetAuthorLink.dataset_id, dataset_ids),
-        "File":                  _chunked_delete(session, File,              File.dataset_id,              dataset_ids),
-        "Dataset":               _chunked_delete(session, Dataset,           Dataset.dataset_id,           dataset_ids),
+        "dataset": dataset_ids,
+        "file": file_ids,
+        "annotation": ann_ids,
+        "molecule": mol_ids,
     }
 
 
-def _log_counts(counts: dict, dry_run: bool) -> None:
-    """Pretty-print the deletion counts."""
-    prefix = "[DRY-RUN] Would delete" if dry_run else "Deleted"
-    for table, n in counts.items():
-        logger.info(f"  {prefix} {n:>7,} row(s) from {table}")
+def query_ids_count(
+    conn: duckdb.DuckDBPyConnection, table: str, col: str, ids: list[int]
+) -> int:
+    """Count rows matching given target IDs safely.
 
-
-# ============================================================================
-# Public entry points
-# ============================================================================
-
-def delete_dataset(source_name: str, id_in_source: str, dry_run: bool = False) -> None:
+    Returns
+    -------
+        int: Matching row count.
     """
-    Remove a single dataset — identified by --datarepo and --dataset — together
-    with all its files and simulation records.
+    if not ids:
+        return 0
+    fmt = ",".join("?" * len(ids))
+    # Direct list unnesting pattern prevents dynamic string construction warnings.
+    query = f"SELECT COUNT(*) FROM {table} WHERE {col} IN ({fmt})"  # noqa: S608
+    return conn.execute(query, ids).fetchone()[0]
+
+
+def delete_by_ids(
+    conn: duckdb.DuckDBPyConnection, table: str, col: str, ids: list[int]
+) -> int:
+    """Delete rows matching given target IDs safely.
+
+    Returns
+    -------
+        int: Total number of deleted rows.
     """
-    logger.info(f"Mode: DELETE DATASET  |  datarepo='{source_name}'  dataset='{id_in_source}'")
-    if dry_run:
-        logger.warning("DRY-RUN enabled — no changes will be written to the database.")
+    if not ids:
+        return 0
+    fmt = ",".join("?" * len(ids))
+    query = f"DELETE FROM {table} WHERE {col} IN ({fmt})"  # noqa: S608
+    return conn.execute(query, ids).fetchone()[0]
 
-    with Session(engine) as session:
-        source = session.exec(
-            select(DataSource).where(DataSource.name == source_name)
-        ).first()
-        if not source:
-            logger.error(f"Data source '{source_name}' not found in the database.")
-            sys.exit(1)
 
-        dataset = session.exec(
-            select(Dataset).where(
-                Dataset.data_source_id == source.data_source_id,
-                Dataset.id_in_data_source == id_in_source,
-            )
-        ).first()
-        if not dataset:
-            logger.error(
-                f"Dataset '{id_in_source}' from '{source_name}' not found in the database."
-            )
-            sys.exit(1)
+def process_deletion(
+    conn: duckdb.DuckDBPyConnection,
+    targets: dict[str, list[int]],
+    *,
+    dry_run: bool,
+) -> dict[str, int]:
+    """Execute preview or child-first deletion across database tables.
 
-        logger.info(f"Found dataset PK={dataset.dataset_id}  title='{dataset.title}'")
+    Returns
+    -------
+        dict[str, int]: Deleted row count mapping per entity.
+    """
+    counts = {}
+    id_map = {
+        "molecule_id": targets["molecule"],
+        "annotation_id": targets["annotation"],
+        "dataset_id": targets["dataset"],
+        "file_id": targets["file"],
+    }
 
-        counts = _delete_by_dataset_ids(session, [dataset.dataset_id], dry_run)
-
+    for table, col, label in TABLE_MAP:
+        ids = id_map[col]
         if dry_run:
-            session.rollback()
+            counts[label] = query_ids_count(conn, table, col, ids)
+            continue
+
+        if table == "files" and ids:
+            fmt = ",".join("?" * len(ids))
+            cnt = 0
+            for clause in (
+                "parent_zip_file_id IS NOT NULL",
+                "parent_zip_file_id IS NULL",
+            ):
+                query = f"DELETE FROM files WHERE file_id IN ({fmt}) AND {clause}"  # noqa: S608
+                cnt += conn.execute(query, ids).fetchone()[0]
+            counts[label] = cnt
         else:
-            session.commit()
-            logger.success("Transaction committed.")
+            counts[label] = delete_by_ids(conn, table, col, ids)
 
-    _log_counts(counts, dry_run)
+    return counts
 
 
-def delete_source(source_name: str, dry_run: bool = False) -> None:
-    """
-    Remove ALL datasets belonging to a data source, then the DataSource row
-    itself.
-    """
-    logger.info(f"Mode: DELETE SOURCE  |  datarepo='{source_name}'")
-    if dry_run:
-        logger.warning("DRY-RUN enabled — no changes will be written to the database.")
+def run_deletion(
+    db_path: Path, source_name: str, id_in_source: str | None, *, dry_run: bool
+) -> None:
+    """Orchestrate source or dataset deletion workflow."""
+    with init_db_connection(db_path) as conn:
+        src = conn.execute(
+            "SELECT data_source_label FROM data_sources WHERE data_source_label = ?",
+            [source_name],
+        ).fetchone()
+        if not src:
+            logger.error(f"Data source '{source_name}' not found.")
+            return
 
-    with Session(engine) as session:
-        source = session.exec(
-            select(DataSource).where(DataSource.name == source_name)
-        ).first()
-        if not source:
-            logger.error(f"Data source '{source_name}' not found in the database.")
-            sys.exit(1)
-
-        dataset_ids: list[int] = list(
-            session.exec(
-                select(Dataset.dataset_id).where(
-                    Dataset.data_source_id == source.data_source_id
-                )
-            ).all()
-        )
-        logger.info(f"Found {len(dataset_ids):,} dataset(s) under '{source_name}'.")
-
-        # Confirmation prompt — before any writes
-        if not dry_run:
-            answer = input(
-                f"\n  WARNING: This will permanently delete ALL {len(dataset_ids):,} datasets "
-                f"and all related records for '{source_name}'.\n"
-                f"  Type the source name to confirm: "
-            ).strip()
-            if answer != source_name:
-                logger.warning("Confirmation did not match. Aborting — nothing was deleted.")
-                sys.exit(0)
-
-        counts = _delete_by_dataset_ids(session, dataset_ids, dry_run)
-
-        if dry_run:
-            counts["DataSource"] = 1
-            session.rollback()
+        if id_in_source:
+            ds = conn.execute(
+                "SELECT dataset_id FROM datasets "
+                "WHERE data_source_label = ? AND id_in_data_source = ?",
+                [source_name, id_in_source],
+            ).fetchone()
+            if not ds:
+                logger.error(f"Dataset '{id_in_source}' not found in '{source_name}'.")
+                return
+            ds_ids = [ds[0]]
         else:
-            session.exec(
-                delete(DataSource).where(
-                    DataSource.data_source_id == source.data_source_id
-                )
+            ds_ids = fetch_ids(
+                conn,
+                "SELECT dataset_id FROM datasets WHERE data_source_label = ?",
+                [source_name],
+            )
+
+        if not dry_run and not id_in_source:
+            msg = f"Type '{source_name}' to confirm full repository deletion: "
+            if input(msg).strip() != source_name:
+                logger.warning("Confirmation mismatch. Aborting.")
+                return
+
+        targets = collect_ids(conn, ds_ids)
+        counts = process_deletion(conn, targets, dry_run)
+
+        if not dry_run and not id_in_source:
+            conn.execute(
+                "DELETE FROM data_sources WHERE data_source_label = ?",
+                [source_name],
             )
             counts["DataSource"] = 1
-            session.commit()
-            logger.success("Transaction committed.")
 
-    _log_counts(counts, dry_run)
+        prefix = "[DRY-RUN] Would delete" if dry_run else "Deleted"
+        for label, count in counts.items():
+            logger.info(f"{prefix} {count:>7,} row(s) from {label}")
 
 
-# ============================================================================
-# CLI
-# ============================================================================
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Remove datasets or entire data sources from the database.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Delete an entire data source (always dry-run first)
-  uv run delete_data.py --datarepo zenodo --dry-run
-  uv run delete_data.py --datarepo zenodo
-
-  # Delete a single dataset within a source (always dry-run first)
-  uv run delete_data.py --datarepo zenodo --dataset 1234567 --dry-run
-  uv run delete_data.py --datarepo zenodo --dataset 1234567
-        """,
-    )
-    parser.add_argument(
-        "--datarepo",
-        required=True,
-        metavar="SOURCE_NAME",
-        help="Repository name to target (e.g. zenodo, atlas, nomad).",
-    )
-    parser.add_argument(
-        "--dataset",
-        metavar="ID_IN_SOURCE",
-        default=None,
-        help="ID of a single dataset within the repository. "
-             "Omit to delete ALL datasets in --datarepo.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview what would be deleted without making any changes.",
-    )
-
-    args = parser.parse_args()
+@click.command(help="Delete dataset or data source records from DuckDB.")
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(exists=True, file_okay=True, path_type=Path),
+    required=True,
+    help="Path to DuckDB database file.",
+)
+@click.option(
+    "--datarepo",
+    "source_name",
+    required=True,
+    help="Target repository name (e.g. zenodo, atlas).",
+)
+@click.option(
+    "--dataset",
+    "id_in_source",
+    default=None,
+    help="Specific dataset ID in repository.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview deleted row counts without mutating data.",
+)
+def main(
+    db_path: Path, source_name: str, id_in_source: str | None, *, dry_run: bool
+) -> None:
+    """CLI entry point for data deletion."""
+    logger = create_logger(Path("logs/delete_data.log"))
     start = time.perf_counter()
-
-    if args.dataset:
-        delete_dataset(args.datarepo, args.dataset, dry_run=args.dry_run)
-    else:
-        delete_source(args.datarepo, dry_run=args.dry_run)
-
+    run_deletion(db_path, source_name, id_in_source, dry_run)
     elapsed = str(timedelta(seconds=time.perf_counter() - start)).split(".")[0]
     logger.info(f"Total time: {elapsed}")
     logger.success("Done.")
