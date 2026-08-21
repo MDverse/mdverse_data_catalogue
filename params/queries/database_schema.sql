@@ -134,10 +134,10 @@ CREATE TABLE IF NOT EXISTS ai_models (
 CREATE SEQUENCE IF NOT EXISTS annotation_id_sequence START 1;
 CREATE TABLE IF NOT EXISTS annotations (
     annotation_id INTEGER PRIMARY KEY DEFAULT nextval('annotation_id_sequence'),
-    dataset_id INTEGER NOT NULL REFERENCES datasets (dataset_id),
+    dataset_id INTEGER REFERENCES datasets (dataset_id),
     publication_id INTEGER REFERENCES publications (publication_id),
     file_id INTEGER REFERENCES files (file_id),
-    value VARCHAR NOT NULL,
+    annotation_value VARCHAR NOT NULL,
     category_label VARCHAR NOT NULL REFERENCES annotation_categories (category_label),
     provenance_label VARCHAR NOT NULL REFERENCES annotation_provenances (provenance_label),
     quality_score DOUBLE CHECK (
@@ -147,10 +147,10 @@ CREATE TABLE IF NOT EXISTS annotations (
             AND quality_score <= 1.0
         )
     ),
-    value_extra VARCHAR,
     comment VARCHAR,
+    -- Avoid duplicate annotations for the same dataset/publication/file and category.
     UNIQUE (
-        value,
+        annotation_value,
         category_label,
         dataset_id,
         publication_id,
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS molecules (
     molecule_id INTEGER PRIMARY KEY DEFAULT nextval('molecule_id_sequence'),
     name VARCHAR,
     formula VARCHAR,
-    sequence VARCHAR NOT NULL,
+    sequence VARCHAR,
     organism VARCHAR,
     molecule_type_label VARCHAR REFERENCES molecule_types (molecule_type_label),
     annotation_id INTEGER NOT NULL REFERENCES annotations (annotation_id)
