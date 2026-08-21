@@ -230,7 +230,7 @@ This populates the `files` and `file_types` tables.
 ### Verify the database
 
 ```sh
-uv run database-report --db-path data/database.duckdb --schema-outpath docs/database_schema.md
+uv run database-report --db data/database.duckdb --schema-outpath docs/database_schema.md
 ```
 
 This will print a summary to the terminal and create a `report_db.log` file.
