@@ -30,16 +30,6 @@ VALUES (
         'STEMP',
         'Simulation temperature',
         'The STEMP entity refers to the thermal conditions under which a simulation is conducted. It includes any explicitly stated temperature values, with or without units.'
-    ),
-    (
-        'NATOMS',
-        'Total number of atoms',
-        'The NATOMS entity refers to the total number of atoms present in the molecular system being simulated. This includes all atoms in the solute, solvent, and any other components of the system.'
-    ),
-    (
-        'STIMESTEP',
-        'Simulation time step',
-        'The STIMESTEP entity refers to the discrete time interval used in molecular dynamics simulations to advance the system state. It is typically expressed in femtoseconds (fs).'
     );
 -- Insert unique annotation provenances.
 INSERT
