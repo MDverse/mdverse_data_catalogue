@@ -10,46 +10,61 @@ from loguru import logger
 from mdverse.core.logger import create_logger
 
 TABLES = [
+    "ai_models",
     "annotation_categories",
     "annotation_provenances",
     "annotations",
-    "authors_papers_link",
+    "authors_publications_link",
     "data_sources",
     "databases",
     "datasets",
     "datasets_authors_link",
-    "datasets_papers_link",
+    "datasets_models_link",
+    "datasets_publications_link",
     "file_types",
     "files",
+    "models_authors_link",
     "molecule_types",
     "molecules",
     "molecules_external_databases",
-    "papers",
     "persons",
     "projects",
+    "publications",
+    "publications_models_link",
 ]
-
 RELATIONSHIPS = {
+    # Hierarchy / Lookups
     ("files", "files"): "||--o|",
     ("molecule_types", "molecules"): "||--o|",
-    ("databases", "molecules_external_databases"): "||--o|",
+    ("databases", "molecules_external_databases"): "||--o{",
     ("projects", "datasets"): "||--o{",
-    ("persons", "authors_papers_link"): "||--o{",
-    ("datasets", "datasets_authors_link"): "||--o{",
     ("data_sources", "datasets"): "||--|{",
-    ("persons", "datasets_authors_link"): "||--|{",
-    ("papers", "authors_papers_link"): "||--|{",
+    ("data_sources", "publications"): "||--|{",
+    ("data_sources", "ai_models"): "||--|{",
     ("file_types", "files"): "||--|{",
     ("datasets", "files"): "||--|{",
     ("annotation_categories", "annotations"): "||--|{",
     ("annotation_provenances", "annotations"): "||--|{",
-    ("molecules", "annotations"): "}o--||",
-    ("molecules_external_databases", "molecules"): "}o--||",
-    ("annotations", "files"): "}o--o|",
-    ("annotations", "datasets"): "}o--o|",
-    ("annotations", "papers"): "}o--o|",
+    ("molecules", "molecules_external_databases"): "||--|{",
+    # Direct References & Annotations
+    ("datasets", "annotations"): "||--o{",
+    ("publications", "annotations"): "|o--o{",
+    ("files", "annotations"): "|o--o{",
+    ("annotations", "molecules"): "||--o|",
+    # Many-to-Many Link Tables
+    ("datasets", "datasets_authors_link"): "||--|{",
+    ("persons", "datasets_authors_link"): "||--|{",
+    ("persons", "authors_publications_link"): "||--|{",
+    ("publications", "authors_publications_link"): "||--|{",
+    ("datasets", "datasets_publications_link"): "||--|{",
+    ("publications", "datasets_publications_link"): "||--|{",
+    ("ai_models", "models_authors_link"): "||--|{",
+    ("persons", "models_authors_link"): "||--|{",
+    ("publications", "publications_models_link"): "||--|{",
+    ("ai_models", "publications_models_link"): "||--|{",
+    ("datasets", "datasets_models_link"): "||--|{",
+    ("ai_models", "datasets_models_link"): "||--|{",
 }
-
 MACRO_URL = (
     "https://gist.github.com/lmangani/dc9ea2ba0a0b2a54a1330e7db868e0bc/raw/"
     "297bbabdb588b4917cf7a357194cc0558bfcb5e9/mermaid.sql"
