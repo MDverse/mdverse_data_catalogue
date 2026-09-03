@@ -254,6 +254,9 @@ def parse_pmc_record(
     )
     # Fetch and parse the full-text XML.
     xml_content = fetch_pmc_xml(client, pmcid, logger)
+    # Filter out empty or null keywords from the raw list.
+    raw_keywords = raw_item.get("keywordList", {}).get("keyword", [])
+    clean_keywords = list(filter(None, raw_keywords))
     # Instantiate the Pydantic PublicationMetadata model.
     try:
         return PublicationMetadata(
@@ -266,7 +269,7 @@ def parse_pmc_record(
             year=str(raw_item.get("pubYear", "")),
             abstract=clean_abstract,
             journal=raw_item.get("journalInfo", {}).get("journal", {}).get("title"),
-            keywords=raw_item.get("keywordList", {}).get("keyword", []),
+            keywords=clean_keywords,
             full_text_xml=xml_content,
             external_links=extract_external_links(xml_content),
         )
