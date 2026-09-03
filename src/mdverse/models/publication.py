@@ -2,8 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mdverse.models.ai_model import AiModelCoreMetadata
-from mdverse.models.dataset import DOI, DatasetCoreMetadata
+from mdverse.models.dataset import DOI
 from mdverse.models.enums import PublicationSourceName
 from mdverse.models.person import Person
 
@@ -59,6 +58,9 @@ class PublicationMetadata(PublicationCoreMetadata):
         default_factory=list,
         description="List of keywords associated with the publication.",
     )
+    full_text_xml: str | None = Field(
+        None, description="Raw JATS XML full text of the publication."
+    )
     materials_and_methods: str | None = Field(
         None, description="Extracted Materials and Methods section text."
     )
@@ -67,13 +69,5 @@ class PublicationMetadata(PublicationCoreMetadata):
     # ------------------------------------------------------------------
     external_links: list[str] = Field(
         default_factory=list,
-        description="List of external references associated with the publication.",
-    )
-    dataset_references: list[DatasetCoreMetadata] = Field(
-        default_factory=list,
-        description="Core references of datasets linked to this publication.",
-    )
-    model_references: list[AiModelCoreMetadata] = Field(
-        default_factory=list,
-        description="Core references of AI models linked to this publication.",
+        description="List of external links (URLs) referenced in the publication.",
     )
