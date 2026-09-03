@@ -17,6 +17,7 @@ METHODS_KEYWORDS = [
     "materials and methods",
     "experimental",
     "simulation details",
+    "protocol",
     "computational methods",
     "methodology",
     "molecular dynamics",
@@ -163,7 +164,7 @@ def extract_methods_from_xml(
                 # Return the cleaned and normalized text content of the chosen section.
                 return clean_markup_text(chosen_text)
 
-        logger.warning(f"Neither Methods nor MD sections found in {pmcid}.")
+        logger.critical(f"Neither Methods nor MD sections found in {pmcid}.")
         return None
 
 
@@ -187,15 +188,16 @@ def process_parquet_methods(
         identifier = row.get("publication_id_in_source")
         methods_text = extract_methods_from_xml(xml_content, identifier, logger)
         methods_records.append(methods_text)
-        logger.info(
-            f"Extracted Methods {index + 1}/{len(dataset_frame)} ({identifier})."
-        )
+        logger.info(f"Extracted {index + 1}/{len(dataset_frame)} methods section.")
     # Overwrite destination Parquet file with the new extracted column.
     dataset_frame["materials_and_methods"] = methods_records
     dataset_frame.to_parquet(out_path, index=False)
     # Log the number of successfully extracted Methods sections.
     extracted_count = sum(section_text is not None for section_text in methods_records)
-    logger.success(f"Extraction complete: {extracted_count}/{len(dataset_frame)}.")
+    logger.success(
+        f"Extraction complete: {extracted_count}/{len(dataset_frame)} "
+        f"({extracted_count / len(dataset_frame) * 100}%)."
+    )
     logger.success(f"Saved updated dataset with extracted Methods to {out_path.name}.")
 
 
