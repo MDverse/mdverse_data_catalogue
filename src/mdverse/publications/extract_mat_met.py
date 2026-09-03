@@ -43,8 +43,8 @@ def extract_section_payload(section_tag: Tag) -> tuple[str, str]:
     title_text = title_tag.get_text(strip=True) if title_tag else ""
     # Iterate over title and paragraph child nodes.
     content_elements = []
-    # Example input nodes: <title>2. Methods</title>, <p>Simulations in GROMACS.</p>
     for element in section_tag.find_all(["title", "p"]):
+        # Example input nodes: <title>2. Methods</title>, <p>Simulations in GROMACS.</p>
         extracted_text = element.get_text(strip=True)
         if extracted_text:
             # Example extracted elements: ["2. Methods", "Simulations in GROMACS."]
@@ -52,23 +52,6 @@ def extract_section_payload(section_tag: Tag) -> tuple[str, str]:
     # Join extracted parts.
     joined_text = "\n\n".join(content_elements).strip()
     return title_text, joined_text
-
-
-def collect_matching_section(
-    section_tag: Tag,
-    keywords_pattern: re.Pattern,
-    candidates_list: list[tuple[str, str]],
-    log_prefix: str,
-    pmcid: str,
-    logger: "loguru.Logger",
-) -> None:
-    """Validate section title against keywords and record payload."""
-    title_text, section_text = extract_section_payload(section_tag)
-    if section_text and keywords_pattern.search(title_text):
-        logger.debug(
-            f"[{pmcid}] {log_prefix}: '{title_text}' (length: {len(section_text)})"
-        )
-        candidates_list.append((title_text, section_text))
 
 
 def get_section_text_length(candidate_entry: tuple[str, str]) -> int:
@@ -81,6 +64,42 @@ def get_section_text_length(candidate_entry: tuple[str, str]) -> int:
     """
     _, section_text = candidate_entry
     return len(section_text)
+
+
+def process_child_sections(
+    section_node: Tag,
+    keywords_pattern: re.Pattern,
+    parent_info: tuple[str, str],
+    pmcid: str,
+    logger: "loguru.Logger" = loguru.logger,
+    *,
+    parent_matches: bool,
+) -> list[tuple[str, str]]:
+    """Process child <sec> nodes of a parent section, logging matches and warnings.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        List of matching child section titles and their text content.
+    """
+    matching_children = []
+    for child in section_node.find_all("sec"):
+        # Extract title and text for the child section.
+        c_title, c_text = extract_section_payload(child)
+        # Check if the child section title matches the Methods keywords.
+        if c_text and keywords_pattern.search(c_title):
+            matching_children.append((c_title, c_text))
+    # Warn if subsections match while the parent does not
+    if not parent_matches and matching_children:
+        p_title, p_text = parent_info
+        logger.warning(
+            f"[{pmcid}] disp-level 1 non-match: '{p_title}' (length: {len(p_text)})"
+        )
+    for c_title, c_text in matching_children:
+        logger.debug(
+            f"[{pmcid}] └── disp-level 2 match: '{c_title}' (length: {len(c_text)})"
+        )
+    return matching_children
 
 
 def extract_methods_from_xml(
@@ -111,39 +130,37 @@ def extract_methods_from_xml(
             if section_node.find_parent("sec"):
                 continue
             # Check if the section matches the Methods keywords.
-            collect_matching_section(
+            title, text = extract_section_payload(section_node)
+            parent_matches = bool(text and keywords_pattern.search(title))
+            if parent_matches:
+                logger.debug(
+                    f"[{pmcid}] disp-level 1 match: '{title}' (length: {len(text)})"
+                )
+                level_1_candidates.append((title, text))
+            # Collect matching subsections for the current section
+            child_matches = process_child_sections(
                 section_node,
                 keywords_pattern,
-                level_1_candidates,
-                "disp-level 1 match",
-                pmcid,
-                logger,
+                parent_info=(title, text),
+                pmcid=pmcid,
+                logger=logger,
+                parent_matches=parent_matches,
             )
-            # Recursively check for child sections (disp-level 2).
-            for child_section in section_node.find_all("sec"):
-                collect_matching_section(
-                    child_section,
-                    keywords_pattern,
-                    level_2_candidates,
-                    "└── disp-level 2 match",
-                    pmcid,
-                    logger,
-                )
+            level_2_candidates.extend(child_matches)
 
         # Priority selection: disp-level 1 first, then fallback to disp-level 2.
-        candidates_by_level = {
-            "disp-level 1": level_1_candidates,
-            "disp-level 2": level_2_candidates,
-        }
-        for level_label, candidate_list in candidates_by_level.items():
-            if candidate_list:
-                chosen_title, chosen_text = max(
-                    candidate_list, key=get_section_text_length
-                )
+        for level_label, candidates in (
+            ("disp-level 1", level_1_candidates),
+            ("disp-level 2", level_2_candidates),
+        ):
+            if candidates:
+                # Select the candidate with the longest text content.
+                chosen_title, chosen_text = max(candidates, key=get_section_text_length)
                 logger.info(
                     f"[{pmcid}] Extracted {level_label} section '{chosen_title}' "
                     f"(length: {len(chosen_text)})."
                 )
+                # Return the cleaned and normalized text content of the chosen section.
                 return clean_markup_text(chosen_text)
 
         logger.warning(f"Neither Methods nor MD sections found in {pmcid}.")
@@ -165,12 +182,14 @@ def process_parquet_methods(
         return
     # Process XML payload for each entry in the DataFrame.
     methods_records = []
-    for i, row in dataset_frame.iterrows():
+    for index, row in dataset_frame.iterrows():
         xml_content = row.get("full_text_xml")
         identifier = row.get("publication_id_in_source")
         methods_text = extract_methods_from_xml(xml_content, identifier, logger)
         methods_records.append(methods_text)
-        logger.info(f"Extracted Methods {i + 1}/{len(dataset_frame)} ({identifier}).")
+        logger.info(
+            f"Extracted Methods {index + 1}/{len(dataset_frame)} ({identifier})."
+        )
     # Overwrite destination Parquet file with the new extracted column.
     dataset_frame["materials_and_methods"] = methods_records
     dataset_frame.to_parquet(out_path, index=False)
@@ -195,10 +214,9 @@ def process_parquet_methods(
 )
 def run_main_from_cli(parquet_path: Path, out_path: Path) -> None:
     """CLI entry point for extracting Methods sections from Parquet."""
-    logger = create_logger(
-        logpath="logs/extract_mat_met.log",
-        level="DEBUG",
-    )
+    log_path = "logs/extract_mat_met.log"
+    logger = create_logger(logpath=log_path, level="DEBUG")
+    logger.info(f"Saved logs to {log_path}.")
     process_parquet_methods(parquet_path, out_path, logger=logger)
 
 
