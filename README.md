@@ -96,8 +96,8 @@ uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
 To scrape Open Access molecular dynamics publications from the [Europe PMC](https://europepmc.org/) database, run the following command:
 
 ```sh
-uv run scrape-europe-pmc --output-path  data/md_papers.parquet --nb-test 10
-uv run scrape-europe-pmc --output-path  data/md_papers.parquet
+uv run scrape-europe-pmc --output-dir tmp --debug
+uv run scrape-europe-pmc --output-dir data
 ```
 
 > [!NOTE]
