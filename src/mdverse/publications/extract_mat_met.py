@@ -25,7 +25,7 @@ METHODS_KEYWORDS = [
 ]
 
 
-def extract_section_payload(section_tag: Tag) -> tuple[str, str]:
+def extract_section(section_tag: Tag) -> tuple[str, str]:
     """Extract section title and joined paragraph content from a section tag.
 
     Parameters
@@ -55,26 +55,14 @@ def extract_section_payload(section_tag: Tag) -> tuple[str, str]:
     return title_text, joined_text
 
 
-def get_section_text_length(candidate_entry: tuple[str, str]) -> int:
-    """Return character length of candidate section text.
-
-    Returns
-    -------
-    int
-        Length of the section text for comparison.
-    """
-    _, section_text = candidate_entry
-    return len(section_text)
-
-
 def process_child_sections(
     section_node: Tag,
     keywords_pattern: re.Pattern,
     parent_info: tuple[str, str],
     pmcid: str,
-    logger: "loguru.Logger" = loguru.logger,
     *,
     parent_matches: bool,
+    logger: "loguru.Logger" = loguru.logger,
 ) -> list[tuple[str, str]]:
     """Process child <sec> nodes of a parent section, logging matches and warnings.
 
@@ -86,10 +74,10 @@ def process_child_sections(
     matching_children = []
     for child in section_node.find_all("sec"):
         # Extract title and text for the child section.
-        c_title, c_text = extract_section_payload(child)
+        child_title, child_text = extract_section(child)
         # Check if the child section title matches the Methods keywords.
-        if c_text and keywords_pattern.search(c_title):
-            matching_children.append((c_title, c_text))
+        if child_text and keywords_pattern.search(child_title):
+            matching_children.append((child_title, child_text))
     # Warn if subsections match while the parent does not
     if not parent_matches and matching_children:
         p_title, p_text = parent_info
@@ -131,7 +119,7 @@ def extract_methods_from_xml(
             if section_node.find_parent("sec"):
                 continue
             # Check if the section matches the Methods keywords.
-            title, text = extract_section_payload(section_node)
+            title, text = extract_section(section_node)
             parent_matches = bool(text and keywords_pattern.search(title))
             if parent_matches:
                 logger.debug(
@@ -156,7 +144,10 @@ def extract_methods_from_xml(
         ):
             if candidates:
                 # Select the candidate with the longest text content.
-                chosen_title, chosen_text = max(candidates, key=get_section_text_length)
+                chosen_title, chosen_text = candidates[0]
+                for title, text in candidates:
+                    if len(text) > len(chosen_text):
+                        chosen_title, chosen_text = title, text
                 logger.info(
                     f"[{pmcid}] Extracted {level_label} section '{chosen_title}' "
                     f"(length: {len(chosen_text)})."
