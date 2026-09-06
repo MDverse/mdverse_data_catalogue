@@ -8,6 +8,7 @@ class DataType(StrEnum):
 
     DATASETS = "datasets"
     FILES = "files"
+    PUBLICATIONS = "publications"
 
 
 class DatasetSourceName(StrEnum):
@@ -31,8 +32,6 @@ class PublicationSourceName(StrEnum):
     """Molecular dynamics publication sources."""
 
     EUROPE_PMC = "europe_pmc"
-    HUGGINGFACE = "huggingface"
-    ARXIV = "arxiv"
 
 
 class ExternalDatabaseName(StrEnum):
