@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from .enums import DatasetSourceName, DataType
+from .enums import DatasetSourceName, DataType, PublicationSourceName
 
 
 class ScraperContext(BaseModel):
@@ -25,7 +25,7 @@ class ScraperContext(BaseModel):
     # Ensure scraped metadata matches the expected schema exactly.
     model_config = ConfigDict(extra="forbid")
 
-    data_source_name: DatasetSourceName = Field(
+    data_source_name: DatasetSourceName | PublicationSourceName = Field(
         ...,
         description="Data repository to be scraped.",
     )
@@ -58,6 +58,15 @@ class ScraperContext(BaseModel):
         0,
         ge=0,
         description="Number of files scraped.",
+    )
+    publications_parquet_file_path: Path = Field(
+        Path(""),
+        description="Path to the output parquet file for publications metadata.",
+    )
+    number_of_publications_scraped: int = Field(
+        0,
+        ge=0,
+        description="Number of publications scraped.",
     )
     token: str | None = Field(
         None,
@@ -93,7 +102,7 @@ class ScraperContext(BaseModel):
         self.log_file_path = (
             self.output_dir_path / f"{self.data_source_name.value}_scraper.log"
         )
-        # Define output parquet file path for datasets and files metadata.
+        # Define output parquet file path for datasets, files and publications metadata.
         self.datasets_parquet_file_path = (
             self.output_dir_path
             / f"{self.data_source_name.value}_{DataType.DATASETS.value}.parquet"
@@ -101,5 +110,9 @@ class ScraperContext(BaseModel):
         self.files_parquet_file_path = (
             self.output_dir_path
             / f"{self.data_source_name.value}_{DataType.FILES.value}.parquet"
+        )
+        self.publications_parquet_file_path = (
+            self.output_dir_path
+            / f"{self.data_source_name.value}_{DataType.PUBLICATIONS.value}.parquet"
         )
         return self
