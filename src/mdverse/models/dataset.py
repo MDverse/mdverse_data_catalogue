@@ -20,7 +20,7 @@ from .simulation import SimulationMetadata
 
 DOI = Annotated[
     str,
-    StringConstraints(pattern=r"^10\.\d{4,9}/[\w\-./]+$"),
+    StringConstraints(pattern=r"^10\.\d{4,9}/[^\s]+$"),
 ]
 
 
@@ -31,7 +31,7 @@ class DatasetCoreMetadata(BaseModel):
     """
     Core provenance metadata shared by dataset and file models.
 
-    This model captures essential information about the source repository
+    This model captures essential information about the source repository.
     """
 
     # Ensure scraped metadata matches the expected schema exactly.

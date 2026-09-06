@@ -8,6 +8,7 @@ class DataType(StrEnum):
 
     DATASETS = "datasets"
     FILES = "files"
+    PUBLICATIONS = "publications"
 
 
 class DatasetSourceName(StrEnum):
@@ -24,6 +25,13 @@ class DatasetSourceName(StrEnum):
     MDPOSIT_INRIA_NODE = "mdposit_inria_node"
     MDPOSIT_MMB_NODE = "mdposit_mmb_node"
     MDPOSIT_CINECA_NODE = "mdposit_cineca_node"
+    HUGGINGFACE = "huggingface"
+
+
+class PublicationSourceName(StrEnum):
+    """Molecular dynamics publication sources."""
+
+    EUROPE_PMC = "europe_pmc"
 
 
 class ExternalDatabaseName(StrEnum):
