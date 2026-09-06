@@ -2,9 +2,9 @@
 
 import html
 import re
-import time
+import sys
 from collections.abc import Generator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import click
@@ -12,17 +12,18 @@ import httpx
 import loguru
 import pandas as pd
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from mdverse.core.logger import create_logger
 from mdverse.models.enums import PublicationSourceName
 from mdverse.models.person import Person
 from mdverse.models.publication import PublicationMetadata
+from mdverse.models.scraper import ScraperContext
 from mdverse.scrapers.network import (
     create_httpx_client,
     is_connection_to_server_working,
 )
+from mdverse.scrapers.toolbox import make_http_get_request_with_retries
 
 EUROPE_PMC_PING_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=test&format=json&pageSize=1"
 EUROPE_PMC_SEARCH_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
@@ -36,8 +37,7 @@ EUROPE_PMC_SEARCH_QUERY = (
     "("
     "("
     "TITLE_ABS:("
-    '("molecular dynamics" OR "MD") AND '
-    "(simulation* OR trajector* OR dataset*)"
+    '("molecular dynamics" OR "MD")'
     ") "
     "OR "
     "METHODS:("
@@ -58,6 +58,8 @@ EUROPE_PMC_SEARCH_QUERY = (
 
 def load_existing_publications_from_parquet(
     parquet_path: Path,
+    *,
+    logger: "loguru.Logger" = loguru.logger,
 ) -> tuple[pd.DataFrame, set[str], dict[str, int]]:
     """Load existing dataset from a Parquet file to avoid duplicates.
 
@@ -77,6 +79,7 @@ def load_existing_publications_from_parquet(
                 enum_value.value: int(source_counts.get(enum_value.value, 0))
                 for enum_value in PublicationSourceName
             }
+        logger.info(f"Loaded {len(dois)} total existing papers from {parquet_path}.")
         return dataframe, dois, counts
     # Return empty structures when no previous parquet file is found.
     return (
@@ -141,8 +144,10 @@ def clean_markup_text(raw_text: str | None) -> str | None:
     return cleaned_text or None
 
 
-def search_europe_pmc_stream(
-    client: httpx.Client, max_results: int | None
+def paginate_europe_pmc(
+    *,
+    max_results: int | None = None,
+    logger: "loguru.Logger" = loguru.logger,
 ) -> Generator[list[dict]]:
     """Stream search results continuously via Europe PMC cursor pagination.
 
@@ -150,11 +155,13 @@ def search_europe_pmc_stream(
     ------
         list[dict]: Page chunk of metadata records.
     """
+    # Initialize cursor and total count for pagination.
+    # "*" is the initial cursor mark for the first page.
     cursor, total = "*", 0
     # Execute paginated requests continuously until the cursor signifies the last page.
     while True:
-        response = client.get(
-            EUROPE_PMC_SEARCH_URL,
+        response = make_http_get_request_with_retries(
+            url=EUROPE_PMC_SEARCH_URL,
             params={
                 "query": EUROPE_PMC_SEARCH_QUERY,
                 "format": "json",
@@ -162,7 +169,9 @@ def search_europe_pmc_stream(
                 "resultType": "core",
                 "cursorMark": cursor,
             },
-            timeout=30.0,
+            timeout=30,
+            delay_before_request=1,
+            logger=logger,
         )
         response.raise_for_status()
         data = response.json()
@@ -179,7 +188,6 @@ def search_europe_pmc_stream(
 
 
 def fetch_pmc_xml(
-    client: httpx.Client,
     pmcid: str,
     logger: "loguru.Logger" = loguru.logger,
 ) -> str | None:
@@ -191,7 +199,12 @@ def fetch_pmc_xml(
     """
     url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
     try:
-        response = client.get(url, timeout=30.0)
+        response = make_http_get_request_with_retries(
+            url=url,
+            timeout=30,
+            delay_before_request=1,
+            logger=logger,
+        )
         if response.status_code != 200:
             logger.error(
                 f"[PMC] Fetch XML failed for {pmcid} ({response.status_code})."
@@ -228,7 +241,6 @@ def extract_external_links(xml_content: str) -> list[str]:
 
 
 def parse_pmc_record(
-    client: httpx.Client,
     raw_item: dict,
     logger: "loguru.Logger" = loguru.logger,
 ) -> PublicationMetadata | None:
@@ -253,7 +265,7 @@ def parse_pmc_record(
         raw_item.get("authorList", {}).get("author", []) or []
     )
     # Fetch and parse the full-text XML.
-    xml_content = fetch_pmc_xml(client, pmcid, logger)
+    xml_content = fetch_pmc_xml(pmcid, logger)
     # Filter out empty or null keywords from the raw list.
     raw_keywords = raw_item.get("keywordList", {}).get("keyword", [])
     clean_keywords = list(filter(None, raw_keywords))
@@ -290,8 +302,9 @@ def export_papers_to_parquet(
     -------
         pd.DataFrame: Updated DataFrame with combined records.
     """
-    # Transform Python models to a dataframe and merge them.
+    # Transform Pydantic models to a dataframe.
     new_df = pd.DataFrame([paper.model_dump() for paper in new_papers])
+    # Combine with existing dataframe and drop duplicates based on DOI.
     combined = (
         pd.concat([dataframe, new_df], ignore_index=True).drop_duplicates(
             subset=["doi"], keep="first"
@@ -306,14 +319,14 @@ def export_papers_to_parquet(
     return combined
 
 
-def scrape_europe_pmc_source(
-    client: httpx.Client,
+def scrape_europe_pmc(
     existing_df: pd.DataFrame,
     existing_dois: set[str],
     output_path: Path,
-    nb_test: int | None,
-    batch_size: int,
     pending_batch: list[PublicationMetadata],
+    *,
+    batch_size: int,
+    nb_test: int | None,
     logger: "loguru.Logger" = loguru.logger,
 ) -> tuple[pd.DataFrame, list[PublicationMetadata], int]:
     """Iterate over Europe PMC stream pages and save papers in batches.
@@ -325,14 +338,14 @@ def scrape_europe_pmc_source(
     """
     pmc_count = 0
     # Walk through the endless results generator and parse items individually.
-    for page_results in search_europe_pmc_stream(client, max_results=None):
+    for page_results in paginate_europe_pmc(max_results=None, logger=logger):
         for raw_item in page_results:
             if nb_test and pmc_count >= nb_test:
                 return existing_df, pending_batch, pmc_count
             doi_val = raw_item.get("doi")
             if not doi_val or str(doi_val).strip().lower() in existing_dois:
                 continue
-            paper = parse_pmc_record(client, raw_item, logger)
+            paper = parse_pmc_record(raw_item, logger)
             # Register validated papers into the pending queue for delayed saving.
             if paper:
                 pmc_count += 1
@@ -347,68 +360,16 @@ def scrape_europe_pmc_source(
     return existing_df, pending_batch, pmc_count
 
 
-def run_scraper_source(
-    name: str,
-    ping_url: str,
-    scraper_func,
-    client: httpx.Client,
-    existing_df: pd.DataFrame,
-    existing_dois: set[str],
-    existing_counts: dict[str, int],
-    output_path: Path,
-    nb_test: int | None,
-    batch_size: int,
-    pending_batch: list[PublicationMetadata],
-    logger: "loguru.Logger" = loguru.logger,
-) -> tuple[pd.DataFrame, list[PublicationMetadata], int]:
-    """Evaluate server connection and dispatch the requested scraper function.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, list[PublicationMetadata], int]:
-        Updated dataframe, pending batch, scraped count.
-    """
-    scraped_count = 0
-    logger.info(f"=== Scraping {name} ===")
-    # Secure server connection validation prior to initiating heavy routines.
-    if is_connection_to_server_working(client, ping_url, logger=logger):
-        logger.success(f"Connection to {name} API successful!")
-        existing_df, pending_batch, scraped_count = scraper_func(
-            client,
-            existing_df,
-            existing_dois,
-            output_path,
-            nb_test,
-            batch_size,
-            pending_batch,
-            logger,
-        )
-    else:
-        logger.warning(f"Connection failed. Skipping {name} source.")
-    if scraped_count == 0:
-        logger.warning(
-            f"[{name}] No new papers scraped. All fetched are already in "
-            f"{output_path.name} ({existing_counts.get(name, 0)} existing)."
-        )
-    return existing_df, pending_batch, scraped_count
-
-
 @click.command(
     help="Scraper for MD papers via Europe PMC.",
     epilog="Happy scraping!",
 )
 @click.option(
-    "--output-path",
-    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
-    required=True,
-    help="Output file path to save the Parquet file.",
-)
-@click.option(
-    "--nb-test",
-    "nb_test",
-    type=int,
-    default=None,
-    help="Max number of papers to scrape per source (for testing/debug).",
+    "--debug",
+    "is_in_debug_mode",
+    is_flag=True,
+    default=False,
+    help="Enable debug mode.",
 )
 @click.option(
     "--batch-size",
@@ -417,50 +378,82 @@ def run_scraper_source(
     default=10,
     help="Number of scraped papers per batch saving.",
 )
+@click.option(
+    "--output-dir",
+    "output_dir_path",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    required=True,
+    help="Output directory path to save results.",
+)
 def main(
-    output_path: Path,
-    nb_test: int | None,
     batch_size: int,
+    output_dir_path: Path,
+    *,
+    is_in_debug_mode: bool = False,
 ) -> None:
     """Scrape paper metadata from Europe PMC API."""
-    level = "DEBUG" if nb_test else "INFO"
-    logger = create_logger(logpath="logs/scrap_publications.log", level=level)
-    logger.info("Starting Europe PMC publication scraping...")
-    start_time = time.perf_counter()
+    # Create scraper context.
+    scraper = ScraperContext(
+        data_source_name=PublicationSourceName.EUROPE_PMC,
+        output_dir_path=output_dir_path,
+        is_in_debug_mode=is_in_debug_mode,
+    )
+    logger = create_logger(logpath=scraper.log_file_path, level="INFO")
+    # Log script name and doctring.
+    logger.info(__file__)
+    logger.info(__doc__)
+    nb_test = None
+    if scraper.is_in_debug_mode:
+        nb_test = 10
+        logger.warning("Debug mode is ON.")
+        logger.warning(f"Limiting number of publications to {nb_test}.")
     # Verify if parquet file exists and load existing DOIs.
     existing_df, existing_dois, existing_counts = (
-        load_existing_publications_from_parquet(output_path)
-    )
-    logger.info(
-        f"Loaded {len(existing_dois)} total existing papers from {output_path.name}."
+        load_existing_publications_from_parquet(scraper.publications_parquet_file_path)
     )
     # Create HTTPX client.
-    load_dotenv()
     client = create_httpx_client()
-    # Run scraper for Europe PMC.
     pending_batch = []
     total_scraped = 0
-    existing_df, pending_batch, count_pmc = run_scraper_source(
-        PublicationSourceName.EUROPE_PMC.value,
-        EUROPE_PMC_PING_URL,
-        scrape_europe_pmc_source,
-        client,
-        existing_df,
-        existing_dois,
-        existing_counts,
-        output_path,
-        nb_test,
-        batch_size,
-        pending_batch,
-        logger,
-    )
-    total_scraped += count_pmc
+    # Check connection to Europe PMC API and run the scraper.
+    if is_connection_to_server_working(client, EUROPE_PMC_PING_URL, logger=logger):
+        logger.success(
+            f"Connection to {PublicationSourceName.EUROPE_PMC.value} API successful!"
+        )
+        existing_df, pending_batch, scraped_count = scrape_europe_pmc(
+            existing_df,
+            existing_dois,
+            scraper.publications_parquet_file_path,
+            pending_batch,
+            batch_size=batch_size,
+            nb_test=nb_test,
+            logger=logger,
+        )
+    else:
+        logger.error("Connection to Europe PMC API failed.")
+        logger.error("Exiting.")
+        sys.exit(1)
+    if scraped_count == 0:
+        logger.warning(
+            f"[{scraper.data_source_name}] No new papers scraped. "
+            f"All fetched are already in {scraper.publications_parquet_file_path.name} "
+            f"({existing_counts.get(scraper.data_source_xname, 0)} existing)."
+        )
+    total_scraped += scraped_count
     # Final batch save if any pending papers remain.
     if pending_batch:
-        export_papers_to_parquet(existing_df, pending_batch, output_path, logger)
-    elapsed = str(timedelta(seconds=time.perf_counter() - start_time)).split(".")[0]
-    logger.info(f"Total new papers saved: {total_scraped} to: {output_path}.")
-    logger.success(f"Successfully completed scraping in {elapsed}.")
+        export_papers_to_parquet(
+            existing_df, pending_batch, scraper.publications_parquet_file_path, logger
+        )
+    # Print elapsed time.
+    elapsed_time = int((datetime.now() - scraper.start_time).total_seconds())
+    logger.success(
+        f"Scraped {scraper.data_source_name} in: {timedelta(seconds=elapsed_time)} 🎉"
+    )
+    # Print where log file is saved.
+    logger.info(f"Saved log file in: {scraper.log_file_path}")
+    if scraper.is_in_debug_mode:
+        logger.warning("---Debug mode was ON---")
 
 
 if __name__ == "__main__":
