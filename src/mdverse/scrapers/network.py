@@ -142,7 +142,7 @@ def make_http_request_with_retries(
     logger.info(f"Sending HTTP {method} request to:")
     logger.info(url)
     for attempt in range(1, max_attempts + 1):
-        try:
+        try:  # ruff: ignore[too-many-statements-in-try-clause] PLW0717
             # First attempt, wait delay_before_request seconds,
             # Second attempt, wait delay_before_request + 10 seconds,
             # Third attempt, wait delay_before_request + 20 seconds, etc.
@@ -301,7 +301,7 @@ def get_zip_file_content_from_http_request(
     zip_file = unzip_http.RemoteZipFile(url)
     try:
         zip_file.namelist()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:  # ruff: ignore[blind-except]
         logger.error(f"Cannot retrieve ZIP file: {e}")
         return file_list
     for file_item in zip_file.infoiter():
@@ -310,7 +310,7 @@ def get_zip_file_content_from_http_request(
             file_list.append(
                 {"file_name": file_item.filename, "file_size": file_item.file_size}
             )
-    logger.debug(f"Found {len(file_list)} files in the ZIP file.")
+    logger.debug(f"Found {len(file_list)} files in the ZIP file")
     return file_list
 
 
@@ -380,10 +380,10 @@ def send_http_request_with_retries_pycurl(
     # Handle SSL certificates.
     curl.setopt(curl.CAINFO, certifi.where())
     # Follow redirect.
-    curl.setopt(curl.FOLLOWLOCATION, True)  # noqa: FBT003
+    curl.setopt(curl.FOLLOWLOCATION, True)  # ruff: ignore[boolean-positional-value-in-call]
     # If data is provided, set the request to POST and add the data.
     if data is not None:
-        curl.setopt(curl.POST, True)  # noqa: FBT003
+        curl.setopt(curl.POST, True)  # ruff: ignore[boolean-positional-value-in-call]
         data_json = json.dumps(data)
         curl.setopt(curl.POSTFIELDS, data_json)
     # Capture the response body in a buffer.

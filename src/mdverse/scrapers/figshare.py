@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from mdverse.core.logger import create_logger
 from mdverse.models.enums import DatasetSourceName
 from mdverse.models.file import FileMetadata
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.utils import (
     export_list_of_models_to_parquet,
@@ -200,7 +201,7 @@ def scrap_zip_files_content(
             f"({zip_files_counter:,}/{len(zip_files):,}"
             f":{zip_files_counter / len(zip_files):.0%})"
         )
-    logger.success("Done extracting files from zip archives.")
+    logger.success("Done extracting files from zip archives")
     return files_in_zip_metadata
 
 
@@ -244,8 +245,13 @@ def extract_metadata_from_single_dataset_record(
         "date_created": record_json.get("created_date"),
         "date_last_updated": record_json.get("modified_date"),
         "title": clean_text(record_json.get("title", "")),
-        "author_names": [
-            clean_text(author.get("full_name"))
+        "authors": [
+            Person(
+                full_name=clean_text(author.get("full_name")),
+                first_name=clean_text(author.get("first_name")),
+                last_name=clean_text(author.get("last_name")),
+                orcid=clean_text(author.get("orcid_id")),
+            )
             for author in record_json.get("authors", [])
         ],
         # Remove far too many line breaks in description.
@@ -365,7 +371,7 @@ def search_all_datasets(
                 found_datasets_per_keyword += found_datasets_per_keyword_per_page
                 logger.info(
                     f"Page {page} fetched "
-                    f"({len(found_datasets_per_keyword_per_page)} datasets)."
+                    f"({len(found_datasets_per_keyword_per_page)} datasets)"
                 )
                 page += 1
             found_datasets_per_filetype.update(found_datasets_per_keyword)
@@ -430,7 +436,7 @@ def get_metadata_for_datasets_and_files(
         dataset_metadata, files_metadata = extract_metadata_from_single_dataset_record(
             resp_json_article, scraper
         )
-        logger.info("Done.")
+        logger.info("Done")
         # Append non-empty metadata to datasets and files lists.
         if dataset_metadata:
             datasets_lst.append(dataset_metadata)

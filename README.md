@@ -27,13 +27,6 @@ Create a virtual environment:
 uv sync
 ```
 
-> **Note:** This project requires PyArrow >= 23.0.1. If you encounter errors
-> related to parquet files, upgrade PyArrow by running:
->
-> ```sh
-> uv add --upgrade pyarrow
-> ```
-
 ## Scrape MD data repositories
 
 Currently, we are scraping the following data repositories:
@@ -49,6 +42,14 @@ Soon:
 
 - [OSF](docs/osf.md)
 - [NMRlipids](docs/nmrlipids.md)
+
+### Data model for scraped data
+
+Generate a visual diagram of the Pydantic model schema to see how scraped metadata are represented:
+
+```sh
+uv run draw-pydantic-schema --out-path data/models/pydantic_schema.png
+```
 
 ### Scraping Zenodo, Figshare and OSF
 
@@ -82,14 +83,6 @@ The script will recursively search for Parquet files in the specified folder.
 Aggregated results are stored in the `data/` folder in `stats_*.tsv` files.
 
 The notebook `notebooks/scraper_stats.ipynb` provides more in-depth analysis and figures.
-
-### Visualise Pydantic schemas
-
-Generate a visual diagram of the Pydantic models schema to see how MDverse entities (datasets, simulations, files, and publications) link together:
-
-```sh
-uv run draw-pydantic-schema --out_path data/models/pydantic_schema.png
-```
 
 ## Analyze Gromacs mdp and gro files
 
