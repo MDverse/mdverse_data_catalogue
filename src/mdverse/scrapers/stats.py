@@ -98,7 +98,7 @@ def aggregate_files(files_df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         Aggregated DataFrame with counts of files by year and repository.
     """
-    files_df["_is_zip_file"] = np.where((files_df["file_type"] == "zip"), True, False)  # noqa FBT003
+    files_df["_is_zip_file"] = np.where((files_df["file_type"] == "zip"), True, False)  # ruff: ignore[boolean-positional-value-in-call] FBT003
     files_df["_size_not_from_zip_file"] = np.where(
         (files_df["containing_archive_file_name"].isna()),
         files_df["file_size_in_bytes"] / 1e9,

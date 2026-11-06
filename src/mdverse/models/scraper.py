@@ -68,7 +68,7 @@ class ScraperContext(BaseModel):
         description="Datetime when the scraper started.",
     )
     is_in_debug_mode: bool = Field(
-        False,  # noqa: FBT003
+        False,  # ruff: ignore[boolean-positional-value-in-call]
         description="Flag indicating if the scraper is running in debug mode.",
     )
 

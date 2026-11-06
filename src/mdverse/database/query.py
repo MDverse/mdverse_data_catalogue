@@ -92,7 +92,7 @@ def random_mdp_information(engine: Engine):
         # When you perform a join on the same table more than once—in this case,
         # joining the File table to itself—you need a way to distinguish between
         # the two instances. This is where an alias comes in.
-        ParentFile = aliased(File)  # Alias for the parent file  # noqa: N806
+        ParentFile = aliased(File)  # Alias for the parent file  # ruff: ignore[non-lowercase-variable-in-function]
 
         # Build a query that:
         # - Joins File to its Dataset and DatasetOrigin, and FileType
@@ -125,7 +125,7 @@ def random_mdp_information(engine: Engine):
             return
 
         # Select one random file
-        random_row = random.choice(results)  # noqa: S311
+        random_row = random.choice(results)  # ruff: ignore[suspicious-non-cryptographic-random-usage]
 
         # Print the information about the random file
         # Prepare a dictionary to represent the table row.

@@ -513,7 +513,7 @@ def create_or_update_datasets_authors_origins_tables(
 # ============================================================================
 
 
-def create_files_tables(files_df: pd.DataFrame, engine: Engine):  # noqa: C901
+def create_files_tables(files_df: pd.DataFrame, engine: Engine):  # ruff: ignore[complex-structure]
     """Bulk-upsert File and FileType rows.
 
     Strategy:
