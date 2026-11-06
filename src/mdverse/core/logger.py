@@ -27,7 +27,7 @@ def create_logger(
     # Define log format.
     logger_format = (
         "{time:YYYY-MM-DD HH:mm:ss} "
-        "| <level>{level:<8}</level> "  # noqa: RUF027
+        "| <level>{level:<8}</level> "  # ruff: ignore[missing-f-string-syntax]
         "| <level>{message}</level>"
     )
     # Remove default logger.

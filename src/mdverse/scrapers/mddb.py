@@ -306,7 +306,7 @@ def fetch_uniprot_protein_name(
         return default_protein_name
 
 
-def extract_proteins(  # noqa: C901
+def extract_proteins(  # ruff: ignore[complex-structure]
     pdb_identifiers: list[ExternalIdentifier],
     uniprot_identifiers: list[str],
     protein_sequences: list[str],
@@ -357,7 +357,7 @@ def extract_proteins(  # noqa: C901
     if protein_sequences and not uniprot_identifiers:
         logger.warning("Found protein sequences but no UniProt identifier")
         for sequence in protein_sequences:
-            molecules.append(  # noqa: PERF401
+            molecules.append(
                 Molecule(
                     name="Protein",
                     type=MoleculeType.PROTEIN,
@@ -396,7 +396,7 @@ def extract_proteins(  # noqa: C901
             client, uniprot_identifiers[0], logger=logger
         )
         for sequence in protein_sequences:
-            molecules.append(  # noqa: PERF401
+            molecules.append(
                 Molecule(
                     name=protein_name,
                     type=MoleculeType.PROTEIN,
@@ -471,7 +471,7 @@ def extract_nucleic_acids(
     """
     molecules = []
     for sequence in nucleic_acid_sequences:
-        molecules.append(  # noqa: PERF401
+        molecules.append(
             Molecule(
                 name="Nucleic acid",
                 type=MoleculeType.NUCLEIC_ACID,
@@ -523,7 +523,7 @@ def extract_small_molecules(
     inchikeys = dataset_metadata.get("INCHIKEYS")
     if inchikeys and isinstance(inchikeys, list):
         for inchikey in inchikeys:
-            molecules.append(  # noqa: PERF401
+            molecules.append(
                 Molecule(
                     name="Small molecule",
                     type=MoleculeType.SMALL_MOLECULE,
