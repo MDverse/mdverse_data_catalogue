@@ -10,20 +10,20 @@ repos:
     # Out-of-the-box hooks for pre-commit.
     rev: v6.0.0
     hooks:
-      # Makes sure files end in a newline and only a newline.
+      # Make sure files end in a newline and only a newline.
       - id: end-of-file-fixer
-      # Replaces or checks mixed line ending.
+      # Replace or checks mixed line ending.
       - id: mixed-line-ending
-      # Trims trailing whitespace.
+      # Trim trailing whitespace.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-      # Attempts to load all json files to verify syntax.
+      # Attempt to load all json files to verify syntax.
       - id: check-json
-      # Attempts to load all yaml files to verify syntax.
+      # Attempt to load all yaml files to verify syntax.
       - id: check-yaml
-      # Attempts to load all TOML files to verify syntax.
+      # Attempt to load all TOML files to verify syntax.
       - id: check-toml
-      # Prevent giant files from being committed.
+      # Prevent committing giant files.
       - id: check-added-large-files
         # Set max file size to 500 KB.
         args: ["--maxkb=500"]
@@ -72,3 +72,6 @@ repos:
     hooks:
       - id: bandit
         args: ["-c", ".bandit.yaml"]
+        # Run only on demand with:
+        # uv run prek run --hook-stage manual bandit --all-files
+        stages: [manual]
