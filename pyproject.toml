@@ -13,9 +13,9 @@ authors = [
 maintainers = [
     { name = "Pierre Poulain", email = "pierre.poulain@cupnet.net" }
 ]
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
@@ -54,6 +54,7 @@ dependencies = [
     "cachetools>=7.0.6",
     "dateparser>=1.4.0",
     "unzip-http>=0.7",
+    "complexipy>=7.0.1",
 ]
 
 [dependency-groups]
@@ -62,7 +63,7 @@ dev = [
     "jupyterlab>=4.4.9",
     "matplotlib>=3.10.1",
     "plotly>=6.0.0",
-    "prek>=0.4.10",
+    "prek>=0.5.10",
     "pysankeybeta>=1.4.2",
     "pytest>=9.0.2",
     "ruff>=0.15.5",
@@ -77,7 +78,7 @@ Issues = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/issues"
 Changelog = "https://github.com/MDverse/MDverse/mdverse_data_catalogue/CHANGELOG.md"
 
 [build-system]
-requires = ["uv_build>=0.9.22,<0.12.0"]
+requires = ["uv_build>=0.9.22,<0.14.0"]
 build-backend = "uv_build"
 
 [project.scripts]
