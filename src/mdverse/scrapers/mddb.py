@@ -16,6 +16,7 @@ import loguru
 from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName, ExternalDatabaseName, MoleculeType
+from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
 from mdverse.models.simulation import (
     ExternalIdentifier,
@@ -164,7 +165,7 @@ def scrape_all_datasets(
 
 def extract_software_and_version(
     dataset_metadata: dict, dataset_id: str, logger: "loguru.Logger" = loguru.logger
-) -> list[Software] | None:
+) -> list[Software]:
     """
     Extract software names and versions from the nested dataset dictionary.
 
@@ -182,21 +183,22 @@ def extract_software_and_version(
 
     Returns
     -------
-    list[Software] | None
-        A list of Software instances with `name` and `version` fields, None otherwise.
+    list[Software]
+        A list of Software instances with `name` and `version` fields,
+        or an empty list if no software is found.
     """
     name = dataset_metadata.get("PROGRAM")
     version = dataset_metadata.get("VERSION")
     if not name:
         logger.warning("No software found")
-        return None
+        return []
     logger.debug(f"Found software: {name.strip()} ({version})")
     return [Software(name=name.strip(), version=version)]
 
 
 def extract_forcefield_or_model_and_version(
     dataset_metadata: dict, dataset_id: str, logger: "loguru.Logger" = loguru.logger
-) -> list[ForceFieldModel] | None:
+) -> list[ForceFieldModel]:
     """
     Extract forcefield or model names and versions from the nested dataset dictionary.
 
@@ -211,9 +213,9 @@ def extract_forcefield_or_model_and_version(
 
     Returns
     -------
-    list[ForceFieldModel] | None
+    list[ForceFieldModel]
         A list of forcefield or model instances with `name` and `version` fields,
-        None otherwise.
+        or an empty list if no forcefield or model is found.
     """
     forcefields_and_models = []
     # Add forcefield names.
@@ -233,7 +235,6 @@ def extract_forcefield_or_model_and_version(
         logger.info(f"Found {len(forcefields_and_models)} forcefield(s) or model(s)")
     else:
         logger.warning("No forcefield or model found")
-        return None
     return forcefields_and_models
 
 
@@ -538,7 +539,7 @@ def extract_molecules(
     dataset_id: str,
     client: httpx.Client,
     logger: "loguru.Logger" = loguru.logger,
-) -> list[Molecule] | None:
+) -> list[Molecule]:
     """Coordinator function to extract all molecule types from dataset metadata.
 
     Parameters
@@ -554,8 +555,8 @@ def extract_molecules(
 
     Returns
     -------
-    list[Molecule] | None
-        A list of extracted molecules or None if no molecules were found.
+    list[Molecule]
+        A list of extracted molecules or an empty list if no molecules were found.
     """
     molecules = []
     # Add PDB identifiers as external identifiers.
@@ -601,7 +602,6 @@ def extract_molecules(
         )
     else:
         logger.warning(f"No molecules found in dataset {dataset_id}")
-        return None
     return molecules
 
 
@@ -658,13 +658,14 @@ def extract_datasets_metadata(
         # Extract simulation metadata.
         simulation_metadata = dataset.get("metadata", {})
         citations = simulation_metadata.get("CITATION")
-        external_links = [citations] if citations else None
-        authors = simulation_metadata.get("AUTHORS")
-        author_names = None
-        if isinstance(authors, list):
-            author_names = authors
-        elif isinstance(authors, str):
-            author_names = [authors.strip()]
+        external_links = [citations] if citations else []
+        # Authors can be provided as a list of names or as a single string.
+        raw_authors = simulation_metadata.get("AUTHORS")
+        if isinstance(raw_authors, str):
+            raw_authors = [raw_authors]
+        authors = []
+        if isinstance(raw_authors, list):
+            authors = [Person(full_name=author.strip()) for author in raw_authors]
         metadata = {
             "dataset_repository_name": dataset_repository_name,
             "dataset_id_in_repository": dataset_id_in_repository,
@@ -676,35 +677,47 @@ def extract_datasets_metadata(
             "title": simulation_metadata.get("NAME"),
             "date_created": dataset.get("creationDate"),
             "date_last_updated": dataset.get("updateDate"),
-            "number_of_files": len(dataset.get("files", [])),
-            "author_names": author_names,
+            # The number of files must be strictly positive or None.
+            "number_of_files": len(dataset.get("files", [])) or None,
+            "authors": authors,
             "license": simulation_metadata.get("LICENSE"),
             "description": simulation_metadata.get("DESCRIPTION"),
-            "total_number_of_atoms": simulation_metadata.get("mdAtoms"),
         }
         # Extract simulation metadata if available.
         # Software names with their versions.
-        metadata["software"] = extract_software_and_version(
+        software = extract_software_and_version(
             simulation_metadata, dataset_id, logger=logger
         )
         # Forcefield and model names with their versions.
-        metadata["forcefields_models"] = extract_forcefield_or_model_and_version(
+        forcefields_models = extract_forcefield_or_model_and_version(
             simulation_metadata, dataset_id, logger=logger
         )
         # Molecules with their nb of atoms and number total of atoms.
-        metadata["molecules"] = extract_molecules(
+        molecules = extract_molecules(
             simulation_metadata, dataset_id, client, logger=logger
         )
         # Time step in fs.
         time_step = simulation_metadata.get("TIMESTEP")
-        metadata["simulation_timesteps_in_fs"] = [time_step] if time_step else None
+        simulation_timesteps_in_fs = [time_step] if time_step else []
         # Temperatures in kelvin.
+        simulation_temperatures_in_kelvin = []
         temperature = simulation_metadata.get("TEMP")
         if temperature and isinstance(temperature, (int, float)):
-            metadata["simulation_temperatures_in_kelvin"] = [temperature]
+            simulation_temperatures_in_kelvin = [temperature]
             logger.debug(f"Found simulation temperature: {temperature} K")
         else:
             logger.warning("No simulation temperature found")
+        # Simulation metadata is kept as a dict to be validated as
+        # SimulationMetadata within normalize_datasets_metadata(),
+        # so that invalid values only discard the current dataset.
+        metadata["simulation"] = {
+            "software": software,
+            "total_number_of_atoms": simulation_metadata.get("mdAtoms"),
+            "molecules": molecules,
+            "forcefields_models": forcefields_models,
+            "simulation_timesteps_in_fs": simulation_timesteps_in_fs,
+            "simulation_temperatures_in_kelvin": simulation_temperatures_in_kelvin,
+        }
         # Extract replicas.
         replica_list = dataset.get("mds")
         if replica_list:
