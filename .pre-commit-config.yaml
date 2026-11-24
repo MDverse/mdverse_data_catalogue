@@ -6,10 +6,11 @@
 exclude: "scripts/*|tmp/*"
 repos:
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    # Out-of-the-box hooks for pre-commit.
-    rev: v6.0.0
+  - repo: builtin
+    # Built-in Prek hooks
     hooks:
+      # Detect private keys and credentials in the code.
+      - id: detect-private-key
       # Make sure files end in a newline and only a newline.
       - id: end-of-file-fixer
       # Replace or checks mixed line ending.
@@ -17,11 +18,14 @@ repos:
       # Trim trailing whitespace.
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-      # Attempt to load all json files to verify syntax.
+      # Fix JSON syntax.
       - id: check-json
-      # Attempt to load all yaml files to verify syntax.
+      # Pretty format JSON files.
+      - id: pretty-format-json
+        args: ["--autofix"]
+      # Fix YAML syntax.
       - id: check-yaml
-      # Attempt to load all TOML files to verify syntax.
+      # Fix TOML syntax.
       - id: check-toml
       # Prevent committing giant files.
       - id: check-added-large-files
