@@ -27,7 +27,7 @@ repos:
       - id: check-yaml
       # Fix TOML syntax.
       - id: check-toml
-      # Prevent committing giant files.
+      # Prevent committing large files.
       - id: check-added-large-files
         # Set max file size to 500 KB.
         args: ["--maxkb=500"]
