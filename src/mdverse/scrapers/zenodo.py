@@ -159,6 +159,10 @@ def extract_data_from_zip_file(url, logger: "loguru.Logger" = loguru.logger):
     - https://zenodo.org/records/4444751/preview/code.zip
     - https://zenodo.org/records/16412906/preview/DPPS200_HN45_0.25M-NaCl_TIP3P_353.15K_prod.zip
 
+    Examples of zip file previews that does not work:
+    - https://zenodo.org/records/21844690/preview/OCEAN.zip
+    "Too many files inside the ZIP file."
+
     url : str
         URL of zip file preview
 
@@ -175,6 +179,12 @@ def extract_data_from_zip_file(url, logger: "loguru.Logger" = loguru.logger):
         return file_lst
     if "Zipfile is not previewable" in response.text:
         logger.warning(f"No preview available for: {url}")
+        logger.warning("Archive is not previewable.")
+        logger.warning("Skipping zip file.")
+        return file_lst
+    if "Too many files inside the ZIP file" in response.text:
+        logger.warning(f"No preview available for: {url}")
+        logger.warning("Archive contains too many files.")
         logger.warning("Skipping zip file.")
         return file_lst
     # Scrap HTML content.
