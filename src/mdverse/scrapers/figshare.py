@@ -247,10 +247,10 @@ def extract_metadata_from_single_dataset_record(
         "title": clean_text(record_json.get("title", "")),
         "authors": [
             Person(
-                full_name=clean_text(author.get("full_name")),
-                first_name=clean_text(author.get("first_name")),
-                last_name=clean_text(author.get("last_name")),
-                orcid=clean_text(author.get("orcid_id")),
+                full_name=clean_text(author.get("full_name", "")),
+                first_name=clean_text(author.get("first_name", "")),
+                last_name=clean_text(author.get("last_name", "")),
+                orcid=clean_text(author.get("orcid_id", "")),
             )
             for author in record_json.get("authors", [])
         ],
