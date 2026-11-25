@@ -188,6 +188,7 @@ def extract_data_from_zip_file(url, logger: "loguru.Logger" = loguru.logger):
         logger.warning(f"No preview available for: {url}")
         logger.warning("Archive contains too many files.")
         logger.warning("Skipping zip file.")
+        return file_lst
     if "File is not a ZIP file" in response.text:
         logger.warning(f"No preview available for: {url}")
         logger.warning("Archive is not a zip file.")
@@ -196,6 +197,11 @@ def extract_data_from_zip_file(url, logger: "loguru.Logger" = loguru.logger):
     # Scrap HTML content.
     soup = BeautifulSoup(response.content, "html5lib")
     table = soup.find("ul", attrs={"class": "tree list-unstyled"})
+    if not table:
+        logger.warning(f"No preview available for: {url}")
+        logger.warning("Archive structure not found.")
+        logger.warning("Skipping zip file.")
+        return file_lst
     files_structure = get_files_structure_from_zip(table)
     # Convert nested dictionary files structure to a flat dictionary.
     df = pd.json_normalize(files_structure, sep="/")
