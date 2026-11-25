@@ -6,8 +6,16 @@
 exclude: "scripts/*|tmp/*"
 repos:
 
+  # Enforce conventional commit messages.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.5.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [feat, fix, docs, style, refactor, test, chore, build, ci]
+
+  # Built-in Prek hooks
   - repo: builtin
-    # Built-in Prek hooks
     hooks:
       # Detect private keys and credentials in the code.
       - id: detect-private-key
@@ -51,13 +59,13 @@ repos:
       - id: ruff-format
         types: [python]
 
-  # YAML
+  # YAML linter
   - repo: https://github.com/adrienverge/yamllint
     rev: v1.38.0
     hooks:
       - id: yamllint
 
-  # Markdown
+  # Markdown linter
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.50.0
     hooks:
@@ -70,8 +78,8 @@ repos:
     hooks:
       - id: shellcheck
 
+  # Security linter for Python code.
   - repo: https://github.com/PyCQA/bandit
-    # Security linter for Python code.
     rev: 1.9.4
     hooks:
       - id: bandit
