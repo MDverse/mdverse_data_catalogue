@@ -99,25 +99,30 @@ def scrape_all_datasets(
     try:
         # Get the formatted response with request metadatas in JSON format
         response_json = response.json()
-        # Get the total datasets from the request md
-        total_datasets = response_json["pagination"]["total"]
-        logger.info(f"Found a total of {total_datasets:,} datasets in NOMAD.")
-        # Get the ID to start the next batch of datasets
-        next_page_value = response_json["pagination"]["next_page_after_value"]
-        # Get only the datasets metadatas
-        datasets = response_json["data"]
-        # Store the first batch of datasets metadata
-        all_datasets.extend(datasets)
-        logger.info(
-            f"Scraped first {len(response_json['data'])}/{total_datasets} datasets"
-        )
-        logger.debug("First dataset metadata:")
-        logger.debug(datasets[0])
     except (json.decoder.JSONDecodeError, ValueError) as exc:
         logger.error(f"Error while parsing NOMAD response: {exc}")
         logger.error("Cannot find datasets.")
         logger.critical("Aborting.")
         sys.exit(1)
+    # Get the total datasets from the request.
+    total_datasets = response_json.get("pagination", {}).get("total", 0)
+    logger.info(f"Found a total of {total_datasets:,} datasets in NOMAD.")
+    # Get the ID to start the next batch of datasets
+    next_page_value = response_json.get("pagination", {}).get(
+        "next_page_after_value", None
+    )
+    # Get only the datasets metadatas
+    datasets = response_json.get("data", [])
+    # Store the first batch of datasets metadata
+    all_datasets.extend(datasets)
+    logger.info(
+        f"Scraped first {len(response_json.get('data', []))}/{total_datasets} datasets"
+    )
+    logger.debug("First dataset metadata:")
+    if datasets:
+        logger.debug(datasets[0])
+    else:
+        logger.debug("No datasets found in the first page.")
 
     # Paginate through remaining datasets.
     logger.info("Scraping remaining datasets")
@@ -138,7 +143,7 @@ def scrape_all_datasets(
             continue
         try:
             response_json = response.json()
-            datasets = response_json["data"]
+            datasets = response_json.get("data", [])
             # Update the next page to start with.
             next_page_value = response_json.get("pagination", {}).get(
                 "next_page_after_value", None
@@ -146,6 +151,7 @@ def scrape_all_datasets(
         except (json.decoder.JSONDecodeError, ValueError) as exc:
             logger.error(f"Error while parsing NOMAD response: {exc}")
             logger.error("Jumping to next iteration.")
+            continue
         logger.info(f"Found {len(datasets)} datasets in this batch.")
         all_datasets += datasets
         logger.info(
@@ -309,28 +315,29 @@ def extract_molecules_and_total_atoms(
 
     try:
         topologies = dataset.get("results", {}).get("material", {}).get("topology", [])
-        if isinstance(topologies, list):
-            # Extract total_atoms from the topology labeled "original".
-            for topology in topologies:
-                if topology.get("label") == "original":
-                    total_atoms = topology.get("n_atoms")
-                    break
-            # Extract molecules.
-            for topology in topologies:
-                if topology.get("structural_type") == "molecule":
-                    molecules.append(
-                        Molecule(
-                            name=topology.get("label", "unknown"),
-                            number_of_atoms=topology.get("n_atoms"),
-                            formula=topology.get("chemical_formula_descriptive"),
-                        )
-                    )
-        else:
-            logger.warning(f"Topologies is not a list for entry {entry_id}.")
-            logger.warning("Skipping molecules extraction.")
     except (ValueError, KeyError) as e:
         logger.warning(f"Error parsing molecules for entry: {entry_id}")
         logger.warning(e)
+
+    if isinstance(topologies, list):
+        # Extract total_atoms from the topology labeled "original".
+        for topology in topologies:
+            if topology.get("label") == "original":
+                total_atoms = topology.get("n_atoms")
+                break
+        # Extract molecules.
+        for topology in topologies:
+            if topology.get("structural_type") == "molecule":
+                molecules.append(
+                    Molecule(
+                        name=topology.get("label", "unknown"),
+                        number_of_atoms=topology.get("n_atoms"),
+                        formula=topology.get("chemical_formula_descriptive"),
+                    )
+                )
+    else:
+        logger.warning(f"Topologies is not a list for entry {entry_id}.")
+        logger.warning("Skipping molecules extraction.")
 
     return molecules, total_atoms
 
@@ -410,7 +417,7 @@ def extract_datasets_metadata(
             "title": dataset.get("entry_name"),
             "date_created": dataset.get("entry_create_time"),
             "date_last_updated": dataset.get("last_processing_time"),
-            "number_of_files": len(dataset.get("files", [])),
+            "number_of_files": len(dataset.get("files", [])) or None,
             "license": dataset.get("license"),
             "description": dataset.get("comment"),
         }
