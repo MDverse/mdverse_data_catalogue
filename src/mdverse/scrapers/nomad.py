@@ -425,6 +425,7 @@ def extract_datasets_metadata(
         authors = [
             Person(full_name=author.get("name"))
             for author in dataset.get("authors", [])
+            if author.get("name")
         ]
         metadata["authors"] = authors
         # Gather software metadata.
