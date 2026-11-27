@@ -12,6 +12,7 @@ from typing import Any
 import click
 import httpx
 import loguru
+from pydantic import ValidationError
 
 from mdverse.core.logger import create_logger
 from mdverse.models.dataset import DatasetMetadata
@@ -328,13 +329,18 @@ def extract_molecules_and_total_atoms(
         # Extract molecules.
         for topology in topologies:
             if topology.get("structural_type") == "molecule":
-                molecules.append(
-                    Molecule(
+                try:
+                    molecule = Molecule(
                         name=topology.get("label", "unknown"),
                         number_of_atoms=topology.get("n_atoms"),
                         formula=topology.get("chemical_formula_descriptive"),
                     )
-                )
+                except ValidationError as exc:
+                    logger.warning(
+                        f"Error parsing molecule for entry {entry_id}: {exc}"
+                    )
+                    continue
+                molecules.append(molecule)
     else:
         logger.warning(f"Topologies is not a list for entry {entry_id}.")
         logger.warning("Skipping molecules extraction.")
