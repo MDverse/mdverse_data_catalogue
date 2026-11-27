@@ -72,13 +72,12 @@ def make_http_get_request_with_retries(
     }
     if headers is not None:
         default_headers.update(headers)
-        headers = default_headers
-    else:
-        headers = default_headers
+    headers = default_headers
+
     logger.info("Making HTTP GET request to:")
     logger.info(url)
     for attempt in range(1, max_attempts + 1):
-        try:
+        try:  # ruff: ignore[too-many-statements-in-try-clause]
             # Fist attempt, wait delay_before_request seconds,
             # Second attempt, wait delay_before_request + 10 seconds,
             # Third attempt, wait delay_before_request + 20 seconds, etc.
