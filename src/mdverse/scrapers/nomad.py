@@ -18,7 +18,7 @@ from mdverse.models.dataset import DatasetMetadata
 from mdverse.models.enums import DatasetSourceName
 from mdverse.models.person import Person
 from mdverse.models.scraper import ScraperContext
-from mdverse.models.simulation import Molecule, SimulationMetadata, Software
+from mdverse.models.simulation import Molecule, Software
 from mdverse.models.utils import (
     export_list_of_models_to_parquet,
     normalize_datasets_metadata,
@@ -438,12 +438,12 @@ def extract_datasets_metadata(
         simulation_timesteps_in_fs = extract_time_step(dataset, entry_id, logger)
         # It looks like the simulation temperature is not available!
         # Extract simulation metadata if available.
-        metadata["simulation"] = SimulationMetadata(
-            molecules=molecules,
-            total_number_of_atoms=total_atoms,
-            software=software,
-            simulation_timesteps_in_fs=simulation_timesteps_in_fs,
-        )
+        metadata["simulation"] = {
+            "molecules": molecules,
+            "total_number_of_atoms": total_atoms,
+            "software": software,
+            "simulation_timesteps_in_fs": simulation_timesteps_in_fs,
+        }
         # Append the extracted metadata to the list of datasets metadata.
         datasets_metadata.append(metadata)
     logger.info(f"Extracted metadata for {len(datasets_metadata)} datasets.")
