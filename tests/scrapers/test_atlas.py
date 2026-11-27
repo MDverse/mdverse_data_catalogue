@@ -77,6 +77,18 @@ def test_generate_description_without_external_identifiers(
     ) in description
 
 
+def test_generate_description_without_organism(
+    simulation_metadata: SimulationMetadata,
+) -> None:
+    """Test that the 'from organism' clause is skipped when no organism is given."""
+    simulation_metadata.molecules[0].organism = None
+    description = atlas_scraper.generate_description(simulation_metadata)
+    assert "from organism" not in description
+    assert (
+        "Phosphoglycerate kinase (pdb ID: 16pk, uniprot ID: P07378) with GROMACS"
+    ) in description
+
+
 def test_generate_description_without_forcefields_models(
     simulation_metadata: SimulationMetadata,
 ) -> None:

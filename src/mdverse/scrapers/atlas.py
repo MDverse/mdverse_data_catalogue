@@ -162,7 +162,8 @@ def generate_description(
     description = "[automatically generated] Molecular dynamics simulation of "
     for molecule in metadata.molecules:
         description += f"{molecule.name} "
-        description += f"from organism {molecule.organism} "
+        if molecule.organism:
+            description += f"from organism {molecule.organism} "
         external_identifiers = [
             f"{ext_id.database_name.value} ID: {ext_id.identifier}"
             for ext_id in molecule.external_identifiers
