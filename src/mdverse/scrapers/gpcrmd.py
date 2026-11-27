@@ -215,7 +215,7 @@ def retrieve_metadata_from_html_dataset_page(
     """
     if not html_content or not field_name:
         return []
-    try:
+    try:  # ruff: ignore[too-many-statements-in-try-clause]
         # Special case for molecules and their number of atoms
         if field_name == "Number of molecules":
             return _extract_molecules_from_lines(html_content)
@@ -474,12 +474,12 @@ def extract_datasets_and_files_metadata(
         # Convert the timestep string (e.g., "4.0 fs")
         # to a float representing the number of femtoseconds
         timestep = dataset.get("timestep")
-        if not isinstance(timestep, float) and timestep is not None:
-            timestep = float(dataset.get("timestep").split()[0])
+        if timestep and isinstance(timestep, str):
+            timestep = float(timestep.split()[0])
         # Adding full metadata for the dataset.
         dataset_dict["simulation"] = SimulationMetadata(
             total_number_of_atoms=dataset.get("atom_num"),
-            simulation_timesteps_in_fs=[timestep],
+            simulation_timesteps_in_fs=[timestep] if timestep else [],
             software=software,
             forcefields_models=forcefields_and_models,
             molecules=molecules,
