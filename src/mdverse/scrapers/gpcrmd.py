@@ -305,30 +305,12 @@ def _parse_authors(raw_authors: str | None) -> list[Person]:
 
     # Handle comma case: left = authors, right = affiliation
     if "," in raw_str:
-        names_part, _, aff_part = raw_str.partition(",")
-        affiliation = aff_part.strip() or None
-        words = names_part.strip().split()
-        n_words = len(words)
-        # Multiple authors case: >= 4 words and even count (pairs of first/last names)
-        if n_words >= 4 and n_words % 2 == 0:
+        name_side, _, affilation_side = raw_str.partition(",")
+        affiliation = affilation_side.strip() or None
+        if name_side.strip():
             return [
                 Person(
-                    first_name=words[i],
-                    last_name=words[i + 1],
-                    full_name=f"{words[i]} {words[i + 1]}",
-                    affiliation=affiliation,
-                )
-                for i in range(0, n_words, 2)
-            ]
-        # Single author case
-        elif words:
-            first = words[0] if n_words > 1 else None
-            last = " ".join(words[1:]) if n_words > 1 else words[0]
-            return [
-                Person(
-                    first_name=first,
-                    last_name=last,
-                    full_name=names_part.strip(),
+                    full_name=f"{name_side.strip()}",
                     affiliation=affiliation,
                 )
             ]
