@@ -386,7 +386,7 @@ def extract_datasets_and_files_metadata(
             client, html_content, core_metadata, logger=logger
         )
         files_metadata.extend(files_metadata_for_this_dataset)
-        dataset_dict["number_of_files"] = len(files_metadata_for_this_dataset)
+        dataset_dict["number_of_files"] = len(files_metadata_for_this_dataset) or None
         # Extract simulation metadata from the API if available.
         # Software names with their versions.
         if dataset.get("mysoftware"):
