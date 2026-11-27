@@ -389,6 +389,7 @@ def extract_datasets_and_files_metadata(
         dataset_dict["number_of_files"] = len(files_metadata_for_this_dataset) or None
         # Extract simulation metadata from the API if available.
         # Software names with their versions.
+        software = []
         if dataset.get("mysoftware"):
             software = [
                 Software(
